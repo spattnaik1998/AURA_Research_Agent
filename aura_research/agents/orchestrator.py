@@ -5,6 +5,7 @@ Agent Orchestrator - Main entry point for multi-agent system
 from typing import Dict, Any
 import asyncio
 from .supervisor_agent import SupervisorAgent
+from .summarizer_agent import SummarizerAgent
 from .workflow import ResearchWorkflow
 import json
 from pathlib import Path
@@ -19,7 +20,8 @@ class AgentOrchestrator:
 
     def __init__(self):
         self.supervisor = SupervisorAgent()
-        self.workflow = ResearchWorkflow(self.supervisor)
+        self.summarizer = SummarizerAgent()
+        self.workflow = ResearchWorkflow(self.supervisor, self.summarizer)
         self.current_session_id = None
 
     async def execute_research(self, query: str) -> Dict[str, Any]:
@@ -149,4 +151,11 @@ if __name__ == "__main__":
     print(f"Total Papers: {result['total_papers']}")
     print(f"Analyses Generated: {result['analyses_count']}")
     print(f"Agents Completed: {result['agents']['completed']}/{result['agents']['total']}")
+
+    if result.get('essay_file_path'):
+        print(f"\nEssay Generated:")
+        print(f"  File: {result['essay_file_path']}")
+        print(f"  Word Count: {result.get('essay_metadata', {}).get('word_count', 0)}")
+        print(f"  Citations: {result.get('essay_metadata', {}).get('citations', 0)}")
+
     print("="*60)

@@ -30,6 +30,9 @@ class ResearchState(TypedDict, total=False):
 
     # Results
     all_analyses: List[Dict[str, Any]]
+    essay: str
+    essay_file_path: str
+    essay_metadata: Dict[str, Any]
     workflow_status: str
 
     # Metadata
@@ -43,14 +46,16 @@ class ResearchWorkflow:
     LangGraph workflow orchestrator for multi-agent research
     """
 
-    def __init__(self, supervisor_agent):
+    def __init__(self, supervisor_agent, summarizer_agent):
         """
-        Initialize workflow with supervisor agent
+        Initialize workflow with supervisor and summarizer agents
 
         Args:
             supervisor_agent: Instance of SupervisorAgent
+            summarizer_agent: Instance of SummarizerAgent
         """
         self.supervisor = supervisor_agent
+        self.summarizer = summarizer_agent
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -69,6 +74,7 @@ class ResearchWorkflow:
         workflow.add_node("distribute_work", self._distribute_work_node)
         workflow.add_node("execute_agents", self._execute_agents_node)
         workflow.add_node("collect_results", self._collect_results_node)
+        workflow.add_node("synthesize_essay", self._synthesize_essay_node)
         workflow.add_node("finalize", self._finalize_node)
 
         # Define edges
@@ -77,7 +83,8 @@ class ResearchWorkflow:
         workflow.add_edge("fetch_papers", "distribute_work")
         workflow.add_edge("distribute_work", "execute_agents")
         workflow.add_edge("execute_agents", "collect_results")
-        workflow.add_edge("collect_results", "finalize")
+        workflow.add_edge("collect_results", "synthesize_essay")
+        workflow.add_edge("synthesize_essay", "finalize")
         workflow.add_edge("finalize", END)
 
         # Compile graph
@@ -188,6 +195,49 @@ class ResearchWorkflow:
 
         return state
 
+    async def _synthesize_essay_node(self, state: ResearchState) -> ResearchState:
+        """Synthesize essay from all analyses"""
+        print("[Workflow] Synthesizing essay from analyses...")
+
+        try:
+            # Prepare data for summarizer
+            summarizer_task = {
+                "query": state["query"],
+                "analyses": state["all_analyses"],
+                "subordinate_results": state["subordinate_results"]
+            }
+
+            # Execute summarizer agent
+            result = await self.summarizer.execute(summarizer_task)
+
+            if result.get("status") == "completed":
+                essay_data = result.get("result", {})
+                state["essay"] = essay_data.get("essay", "")
+                state["essay_file_path"] = essay_data.get("file_path", "")
+                state["essay_metadata"] = {
+                    "word_count": essay_data.get("word_count", 0),
+                    "citations": essay_data.get("citations", 0),
+                    "papers_synthesized": essay_data.get("papers_synthesized", 0)
+                }
+                state["workflow_status"] = "essay_synthesized"
+
+                print(f"[Workflow] Essay synthesized: {essay_data.get('word_count', 0)} words")
+            else:
+                state["errors"].append(f"Summarizer failed: {result.get('error', 'Unknown error')}")
+                state["workflow_status"] = "synthesis_failed"
+                state["essay"] = ""
+                state["essay_file_path"] = ""
+                state["essay_metadata"] = {}
+
+        except Exception as e:
+            state["errors"].append(f"Synthesis error: {str(e)}")
+            state["workflow_status"] = "synthesis_failed"
+            state["essay"] = ""
+            state["essay_file_path"] = ""
+            state["essay_metadata"] = {}
+
+        return state
+
     async def _finalize_node(self, state: ResearchState) -> ResearchState:
         """Finalize the workflow"""
         print("[Workflow] Finalizing workflow...")
@@ -243,6 +293,9 @@ class ResearchWorkflow:
             },
             "analyses": final_state["all_analyses"],
             "subordinate_results": final_state["subordinate_results"],
+            "essay": final_state.get("essay", ""),
+            "essay_file_path": final_state.get("essay_file_path", ""),
+            "essay_metadata": final_state.get("essay_metadata", {}),
             "execution_time": final_state["end_time"],
             "errors": final_state["errors"]
         }
