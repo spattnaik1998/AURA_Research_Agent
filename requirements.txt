@@ -1,0 +1,29 @@
+# FastAPI and Server
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# Environment and Config
+python-dotenv==1.0.0
+
+# OpenAI and LangChain
+openai==1.12.0
+langchain==0.1.6
+langchain-openai==0.0.5
+langgraph==0.0.20
+langchain-community==0.0.20
+
+# RAG and Vector Store
+faiss-cpu==1.7.4
+tiktoken==0.5.2
+
+# Web Search
+google-search-results==2.4.2
+
+# Data Processing
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Utilities
+aiohttp==3.9.3
+requests==2.31.0
