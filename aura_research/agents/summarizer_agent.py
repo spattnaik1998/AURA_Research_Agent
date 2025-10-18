@@ -78,11 +78,43 @@ class SummarizerAgent(BaseAgent):
 
         print(f"[Summarizer] Essay generated: {metadata['word_count']} words, {metadata['citations']} citations")
 
+        # Notify that RAG can be initialized
+        self._notify_rag_ready(file_path, analyses)
+
         return {
             "essay": essay,
             "file_path": file_path,
+            "rag_ready": True,  # Signal that RAG can be initialized
             **metadata
         }
+
+    def _notify_rag_ready(self, essay_file_path: str, analyses: List[Dict[str, Any]]):
+        """
+        Notify backend that RAG chatbot can be initialized
+
+        Args:
+            essay_file_path: Path to the saved essay
+            analyses: List of all analyses for vector store
+        """
+        print(f"\n{'='*60}")
+        print("[Summarizer] RAG INITIALIZATION READY")
+        print(f"{'='*60}")
+        print(f"Essay saved: {essay_file_path}")
+        print(f"Total analyses available: {len(analyses)}")
+        print(f"RAG chatbot can now be activated with this content")
+        print(f"{'='*60}\n")
+
+        # Create RAG-ready signal file
+        rag_signal_path = Path(ESSAYS_DIR) / "rag_ready.signal"
+        with open(rag_signal_path, 'w') as f:
+            f.write(json.dumps({
+                "essay_path": essay_file_path,
+                "analyses_count": len(analyses),
+                "timestamp": datetime.now().isoformat(),
+                "status": "ready"
+            }, indent=2))
+
+        print(f"[Summarizer] RAG signal file created: {rag_signal_path}")
 
     async def _create_synthesis(
         self,
@@ -314,13 +346,14 @@ Write 2-3 well-structured paragraphs.""")
         return essay
 
     def _save_essay(self, query: str, essay: str) -> str:
-        """Save essay to file"""
+        """Save essay to .txt file"""
         # Create filename from query
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_query = "".join(c if c.isalnum() or c in (' ', '-') else '' for c in query)
         safe_query = safe_query.replace(' ', '_')[:50]  # Limit length
 
-        filename = f"essay_{safe_query}_{timestamp}.md"
+        # Save as .txt file as specified
+        filename = f"essay_{safe_query}_{timestamp}.txt"
         file_path = Path(ESSAYS_DIR) / filename
 
         # Save essay
@@ -328,6 +361,14 @@ Write 2-3 well-structured paragraphs.""")
             f.write(essay)
 
         print(f"[Summarizer] Essay saved to: {file_path}")
+
+        # Also save markdown version for better formatting
+        md_filename = f"essay_{safe_query}_{timestamp}.md"
+        md_file_path = Path(ESSAYS_DIR) / md_filename
+        with open(md_file_path, 'w', encoding='utf-8') as f:
+            f.write(essay)
+
+        print(f"[Summarizer] Markdown version saved to: {md_file_path}")
 
         return str(file_path)
 
