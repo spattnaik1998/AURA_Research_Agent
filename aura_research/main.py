@@ -5,11 +5,12 @@ FastAPI Backend Server
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from .routes import chat
 import uvicorn
 
 app = FastAPI(
     title="AURA Research Assistant",
-    description="Autonomous multi-agent research system",
+    description="Autonomous multi-agent research system with RAG chatbot",
     version="1.0.0"
 )
 
@@ -21,6 +22,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(chat.router)
 
 @app.get("/")
 async def root():
@@ -44,4 +48,4 @@ async def health_check():
     }
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("aura_research.main:app", host="0.0.0.0", port=8000, reload=True)
