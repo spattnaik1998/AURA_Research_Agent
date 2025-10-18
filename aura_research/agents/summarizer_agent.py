@@ -5,7 +5,7 @@ Synthesizes subordinate agent outputs into a cohesive research essay
 
 from typing import Dict, Any, List
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from .base_agent import BaseAgent
 from ..utils.config import OPENAI_API_KEY, GPT_MODEL, ESSAYS_DIR
 import json

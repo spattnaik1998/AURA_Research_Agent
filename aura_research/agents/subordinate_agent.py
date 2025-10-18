@@ -6,7 +6,7 @@ Analyzes assigned research papers and extracts key information
 from typing import Dict, Any, List
 import asyncio
 from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from .base_agent import BaseAgent, AgentStatus
 from ..utils.config import OPENAI_API_KEY, GPT_MODEL
 import json
