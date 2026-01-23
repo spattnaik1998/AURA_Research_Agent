@@ -25,7 +25,7 @@ class SubordinateAgent(BaseAgent):
         self.llm = ChatOpenAI(
             model=GPT_MODEL,
             api_key=OPENAI_API_KEY,
-            temperature=0.3
+            temperature=0.2  # Lower for more precision and consistency
         )
 
     async def run(self, task: Dict[str, Any]) -> Dict[str, Any]:
@@ -75,60 +75,125 @@ class SubordinateAgent(BaseAgent):
         """
         # ReAct Framework: Reasoning + Acting
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert research analyst using the ReAct (Reasoning + Acting) framework.
+            ("system", """You are an ELITE research analyst with PhD-level expertise. Your analysis must be METICULOUS, PRECISE, and SUBSTANTIVE.
 
-For each paper, follow this process:
-1. THOUGHT: Analyze the research significance and context
-2. ACTION: Extract key information systematically
-3. OBSERVATION: Identify patterns, findings, and contributions
-4. REFLECTION: Assess novelty, impact, and limitations
+CRITICAL REQUIREMENTS:
+1. NEVER use generic placeholders like "Main contribution 1" or "Key finding 1"
+2. Extract SPECIFIC, CONCRETE information from the paper
+3. If information is missing, state "Information not provided in abstract" - DO NOT fabricate
+4. Be scholarly, detailed, and precise
+5. Think deeply before writing - quality over speed
 
-Output a structured JSON with:
-- summary: Concise 2-3 sentence overview
-- key_points: List of main contributions and findings
-- citations: Proper citation information
-- metadata: Analysis details"""),
-            ("user", """Analyze this research paper using ReAct reasoning:
+ANALYSIS FRAMEWORK (ReAct - Reasoning + Acting):
 
-Title: {title}
-Abstract/Summary: {snippet}
-Source: {link}
+STEP 1 - DEEP READING:
+- Read the title and abstract 3 times
+- Identify the core research question
+- Understand the specific problem being addressed
 
-Follow the ReAct framework:
+STEP 2 - CRITICAL THINKING:
+- What SPECIFIC claims does this paper make?
+- What SPECIFIC methods/approaches are used?
+- What SPECIFIC results/findings are presented?
+- What makes this research UNIQUE or NOVEL?
 
-THOUGHT: What is the significance of this research?
-ACTION: Extract the core contributions and methodology
-OBSERVATION: What are the key findings and results?
-REFLECTION: What is novel and what gaps exist?
+STEP 3 - VERIFICATION:
+- Can you point to exact phrases from the abstract?
+- Are you making inferences or stating facts?
+- Is every claim backed by the source material?
 
-Output in this JSON format:
+STEP 4 - SCHOLARLY SYNTHESIS:
+- Synthesize findings in academic language
+- Maintain objectivity and precision
+- Highlight genuine contributions
+
+OUTPUT REQUIREMENTS:
+- Summary: 3-4 sentences with SPECIFIC details from the paper
+- Key Points: 5-7 SPECIFIC insights (not generic templates)
+- Each point must reference actual content from the abstract
+- Use scholarly language with precision
+- Extract author names and publication year if mentioned ANYWHERE in the text"""),
+            ("user", """ANALYZE THIS RESEARCH PAPER WITH EXTREME PRECISION:
+
+═══════════════════════════════════════════════════════════
+TITLE: {title}
+
+ABSTRACT/DESCRIPTION: {snippet}
+
+SOURCE URL: {link}
+
+PUBLICATION INFO: {pub_info}
+═══════════════════════════════════════════════════════════
+
+MANDATORY ANALYSIS STEPS:
+
+1. THOUGHT (Deep Reading):
+   - What is the EXACT research question or objective?
+   - What specific problem does this address?
+   - What domain/field is this research in?
+
+2. ACTION (Information Extraction):
+   - Extract SPECIFIC methodologies mentioned
+   - Extract SPECIFIC findings or results stated
+   - Extract SPECIFIC contributions claimed
+   - Extract author names if visible in title format (e.g., "Smith et al.")
+   - Extract publication year from any source
+
+3. OBSERVATION (Critical Analysis):
+   - What are the CONCRETE findings (use exact terms from abstract)?
+   - What techniques/algorithms/methods are named?
+   - What datasets, experiments, or case studies are mentioned?
+   - What metrics or measurements are reported?
+
+4. REFLECTION (Scholarly Assessment):
+   - What makes this research novel? (Be specific)
+   - What are potential limitations? (Based on what's stated/not stated)
+   - How does this advance the field? (Concrete ways)
+   - What gaps remain?
+
+OUTPUT IN THIS EXACT JSON FORMAT:
 {{
-    "summary": "Brief 2-3 sentence overview of the paper",
+    "summary": "A detailed 3-4 sentence scholarly summary that includes: (1) the specific research problem, (2) the specific methods/approach used, (3) the specific key findings or contributions, and (4) the significance. Use ONLY information from the abstract - be precise and detailed.",
+
     "key_points": [
-        "Main contribution 1",
-        "Main contribution 2",
-        "Key finding 1",
-        "Methodology insight",
-        "Novel aspect"
+        "First SPECIFIC contribution or finding with concrete details from the abstract",
+        "Second SPECIFIC contribution - name actual techniques, methods, or approaches mentioned",
+        "Third SPECIFIC finding - include metrics, improvements, or results if stated",
+        "Fourth SPECIFIC insight about methodology or experimental approach",
+        "Fifth SPECIFIC novelty - what exactly is new compared to prior work",
+        "Sixth SPECIFIC implication or application domain mentioned",
+        "Seventh SPECIFIC limitation or future direction if discussed"
     ],
+
     "citations": [
         {{
-            "title": "paper title",
-            "authors": "if available, else 'Not specified'",
-            "year": "if available, else 'Not specified'",
+            "title": "{title}",
+            "authors": "Extract from title format (e.g., 'Smith et al.') OR from publication info OR 'Information not provided in abstract'",
+            "year": "Extract from publication info OR title OR 'Information not provided in abstract'",
             "source": "{link}"
         }}
     ],
+
     "metadata": {{
-        "core_ideas": ["idea1", "idea2"],
-        "methodology": "brief description",
-        "key_findings": ["finding1", "finding2"],
-        "novelty": "what's new",
-        "limitations": ["limitation1", "limitation2"],
-        "relevance_score": 8,
-        "reasoning": "Your ReAct thought process summary"
+        "core_ideas": ["Specific idea 1 from paper", "Specific idea 2 from paper", "Specific idea 3 from paper"],
+        "methodology": "Detailed description of the EXACT methods/approach mentioned in the abstract (100+ words if possible, be thorough)",
+        "key_findings": ["Specific finding 1 with details", "Specific finding 2 with details", "Specific finding 3 with details"],
+        "novelty": "Precise description of what is NEW in this work - reference specific innovations, techniques, or insights mentioned (50+ words)",
+        "limitations": ["Specific limitation 1 based on what's not addressed", "Specific limitation 2", "Specific gap noted"],
+        "relevance_score": (1-10 based on: novelty + methodological rigor + impact + clarity),
+        "reasoning": "Your complete ReAct thought process: what you read, what you extracted, how you verified it, and why you scored it this way (150+ words)",
+        "research_domain": "Specific field/subfield (e.g., 'Natural Language Processing', 'Computer Vision', 'Reinforcement Learning')",
+        "technical_depth": "Assessment of technical sophistication: 'theoretical', 'applied', 'empirical', or 'survey'",
+        "real_content_extracted": true
     }}
-}}""")
+}}
+
+CRITICAL REMINDERS:
+- NO generic templates - every word must be specific to THIS paper
+- If abstract lacks detail, state that clearly but extract what IS there
+- Use exact terminology from the paper
+- Be scholarly and precise
+- Quality and accuracy over everything else""")
         ])
 
         try:
@@ -137,7 +202,8 @@ Output in this JSON format:
             response = await chain.ainvoke({
                 "title": paper.get("title", "Unknown"),
                 "snippet": paper.get("snippet", "No description available"),
-                "link": paper.get("link", "")
+                "link": paper.get("link", ""),
+                "pub_info": str(paper.get("publication_info", ""))
             })
 
             # Parse JSON response
@@ -216,12 +282,26 @@ Output in this JSON format:
             return "No analyses to summarize"
 
         summary_prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are a research synthesizer. Create a concise summary of the analyzed papers."),
-            ("user", """Based on these paper analyses, provide a brief 2-3 sentence summary of the key themes and findings:
+            ("system", """You are a SENIOR research synthesizer with exceptional analytical skills.
+
+Your summary must be:
+- SPECIFIC and detailed (not generic)
+- Based ONLY on actual findings from the analyses
+- Scholarly and precise
+- Comprehensive yet concise"""),
+            ("user", """SYNTHESIZE these paper analyses into a comprehensive summary:
 
 {analyses}
 
-Focus on common patterns, major contributions, and overall research direction.""")
+REQUIREMENTS:
+1. Identify 3-5 SPECIFIC common themes across papers (use actual terminology from papers)
+2. Highlight major CONCRETE contributions (not generic statements)
+3. Note methodological patterns with specific examples
+4. Identify research gaps or contradictions
+5. Write 4-6 sentences that demonstrate deep understanding
+
+Focus on SUBSTANCE - what did you actually learn from these papers?
+Use precise language and specific examples from the analyses.""")
         ])
 
         try:

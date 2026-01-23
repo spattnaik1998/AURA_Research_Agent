@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import asyncio
 from datetime import datetime
+from ..utils.image_analyzer import get_image_analyzer
 
 router = APIRouter(prefix="/research", tags=["research"])
 
@@ -18,6 +19,17 @@ active_sessions: Dict[str, Dict[str, Any]] = {}
 class ResearchRequest(BaseModel):
     """Research request model"""
     query: str
+
+
+class ImageAnalysisRequest(BaseModel):
+    """Image analysis request model"""
+    image_data: str  # Base64 encoded image with data:image prefix
+
+
+class ImageAnalysisResponse(BaseModel):
+    """Image analysis response model"""
+    query: str
+    message: str
 
 
 class ResearchResponse(BaseModel):
@@ -52,28 +64,33 @@ async def run_research_workflow(query: str, session_id: str):
         active_sessions[session_id]["current_step"] = "initializing"
 
         # Import orchestrator
-        from ..agents.orchestrator import ResearchOrchestrator
+        from ..agents.orchestrator import AgentOrchestrator
 
         # Update status: Fetching papers
         active_sessions[session_id]["current_step"] = "fetching_papers"
         print(f"[Research API] Fetching papers for session {session_id}")
 
         # Create orchestrator
-        orchestrator = ResearchOrchestrator()
+        orchestrator = AgentOrchestrator()
 
         # Update status: Analyzing
         active_sessions[session_id]["current_step"] = "analyzing"
         print(f"[Research API] Analyzing papers for session {session_id}")
 
-        # Run research (this is blocking, but runs in background task)
-        result = await orchestrator.run_research(query)
+        # Run research with timeout protection (10 minutes max)
+        try:
+            result = await asyncio.wait_for(
+                orchestrator.execute_research(query),
+                timeout=600.0  # 10 minutes
+            )
+        except asyncio.TimeoutError:
+            raise Exception("Research workflow timed out after 10 minutes. Please try with a more specific query.")
 
         # Update status: Synthesizing
         active_sessions[session_id]["current_step"] = "synthesizing"
         print(f"[Research API] Synthesizing essay for session {session_id}")
 
         # Small delay to show synthesizing step
-        import asyncio
         await asyncio.sleep(2)
 
         # Update status: Completed
@@ -232,3 +249,40 @@ async def clear_session(session_id: str):
         return {"message": f"Session {session_id} cleared"}
     else:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+
+@router.post("/analyze-image", response_model=ImageAnalysisResponse)
+async def analyze_image(request: ImageAnalysisRequest):
+    """
+    Analyze an image and extract a research query using GPT-4o Vision
+
+    Args:
+        request: Image analysis request with base64 encoded image
+
+    Returns:
+        Extracted research query
+
+    Example:
+        ```
+        POST /research/analyze-image
+        {
+            "image_data": "data:image/png;base64,iVBORw0KGgo..."
+        }
+        ```
+    """
+    try:
+        # Get image analyzer instance
+        analyzer = get_image_analyzer()
+
+        # Extract query from image
+        query = analyzer.extract_research_query(request.image_data)
+
+        return ImageAnalysisResponse(
+            query=query,
+            message="Successfully extracted research query from image"
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image analysis failed: {str(e)}")

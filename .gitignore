@@ -85,3 +85,32 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Generated documentation/debug files (root level)
+BUG_ANALYSIS*.md
+ERROR_*.md
+FIX_*.md
+*_GUIDE.md
+*_SUMMARY.md
+*_REPORT.md
+IMPROVEMENTS*.md
+LINKEDIN_POST*.md
+README_FIXES*.md
+RUNNING_*.md
+SETUP_*.md
+SUBORDINATE_AGENT*.md
+SUMMARIZER_AGENT*.md
+
+# Script files (generated for fixes)
+fix_*.bat
+fix_*.sh
+restart_*.bat
+
+# Test files in root (should be in tests/ folder)
+test_*.py
+
+# Windows artifacts
+nul
+
+# Signal files
+*.signal

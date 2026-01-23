@@ -26,7 +26,7 @@ class SummarizerAgent(BaseAgent):
         self.llm = ChatOpenAI(
             model=GPT_MODEL,
             api_key=OPENAI_API_KEY,
-            temperature=0.5  # Slightly higher for more creative synthesis
+            temperature=0.4  # Balanced for creative but accurate synthesis
         )
 
     async def run(self, task: Dict[str, Any]) -> Dict[str, Any]:
@@ -78,15 +78,70 @@ class SummarizerAgent(BaseAgent):
 
         print(f"[Summarizer] Essay generated: {metadata['word_count']} words, {metadata['citations']} citations")
 
+        # Initialize RAG vector store immediately
+        session_id = self._extract_session_id(file_path)
+        rag_initialized = self._initialize_rag_vector_store(session_id, analyses, essay, query)
+
         # Notify that RAG can be initialized
         self._notify_rag_ready(file_path, analyses)
 
         return {
             "essay": essay,
             "file_path": file_path,
-            "rag_ready": True,  # Signal that RAG can be initialized
+            "rag_ready": rag_initialized,  # Signal that RAG is actually initialized
             **metadata
         }
+
+    def _extract_session_id(self, file_path: str) -> str:
+        """Extract session ID from file path"""
+        import re
+        match = re.search(r'_(\d{8}_\d{6})\.', file_path)
+        if match:
+            return match.group(1)
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    def _initialize_rag_vector_store(
+        self,
+        session_id: str,
+        analyses: List[Dict[str, Any]],
+        essay: str,
+        query: str
+    ) -> bool:
+        """
+        Initialize RAG vector store immediately after essay generation
+
+        Args:
+            session_id: Research session ID
+            analyses: List of paper analyses
+            essay: Generated essay
+            query: Research query
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from ..rag.vector_store import VectorStoreManager
+
+            print(f"\n[Summarizer] Initializing RAG vector store for session: {session_id}")
+
+            # Create vector store manager
+            vector_manager = VectorStoreManager()
+
+            # Initialize from session data directly
+            success = vector_manager.initialize_from_session(session_id)
+
+            if success:
+                print(f"[Summarizer] ✅ RAG vector store initialized successfully")
+                return True
+            else:
+                print(f"[Summarizer] ⚠️  RAG vector store initialization failed")
+                return False
+
+        except Exception as e:
+            print(f"[Summarizer] ❌ RAG vector store initialization error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def _notify_rag_ready(self, essay_file_path: str, analyses: List[Dict[str, Any]]):
         """
@@ -132,29 +187,68 @@ class SummarizerAgent(BaseAgent):
             Structured synthesis with themes and patterns
         """
         synthesis_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a research synthesizer. Analyze multiple research paper analyses and identify:
-1. Main themes and patterns
-2. Key methodologies used
-3. Common findings and contradictions
-4. Research gaps and future directions
-5. Most impactful contributions
+            ("system", """You are a WORLD-CLASS research synthesizer with expertise in meta-analysis and systematic reviews.
 
-Return a structured JSON summary."""),
-            ("user", """Research Query: {query}
+CRITICAL REQUIREMENTS:
+1. Extract SPECIFIC themes using actual terminology from the papers
+2. Identify CONCRETE methodologies with precise names (algorithms, frameworks, techniques)
+3. Synthesize SUBSTANTIVE findings (not generic statements)
+4. Be scholarly, precise, and insightful
+5. Think like a senior researcher conducting a literature review
 
-Analyze these {count} paper analyses and create a structured synthesis:
+Your synthesis will guide the final essay - make it exceptional."""),
+            ("user", """CONDUCT A COMPREHENSIVE SYNTHESIS OF RESEARCH FINDINGS
 
+Research Query: {query}
+Number of Papers: {count}
+
+═══════════════════════════════════════════════════════════
+PAPER ANALYSES:
 {analyses}
+═══════════════════════════════════════════════════════════
 
-Provide output in JSON format:
+SYNTHESIS REQUIREMENTS:
+
+1. MAIN THEMES (5-8 themes):
+   - Identify SPECIFIC recurring topics using exact terminology from papers
+   - Example: "Transformer-based architectures for sequence modeling" NOT "deep learning methods"
+   - Each theme should be substantive and precise
+
+2. METHODOLOGIES (5-10 specific methods):
+   - List EXACT methods, algorithms, frameworks mentioned
+   - Examples: "BERT fine-tuning", "Proximal Policy Optimization", "Variational Autoencoders"
+   - NOT generic like "machine learning approaches"
+
+3. KEY FINDINGS (8-12 findings):
+   - Extract SPECIFIC discoveries, improvements, or insights
+   - Include metrics if mentioned (e.g., "achieved 95% accuracy on ImageNet")
+   - Each finding should be concrete and informative
+
+4. CONTRADICTIONS (if any):
+   - Identify where papers disagree or present conflicting results
+   - Be specific about what conflicts and why
+
+5. RESEARCH GAPS (3-7 gaps):
+   - What questions remain unanswered?
+   - What limitations were noted?
+   - What future work was suggested?
+
+6. TOP CONTRIBUTIONS (5-8 contributions):
+   - What are the most significant advances from these papers?
+   - What novel techniques or insights were introduced?
+   - What practical applications were demonstrated?
+
+OUTPUT IN PRECISE JSON FORMAT:
 {{
-    "main_themes": ["theme1", "theme2", ...],
-    "methodologies": ["method1", "method2", ...],
-    "key_findings": ["finding1", "finding2", ...],
-    "contradictions": ["contradiction1", ...],
-    "research_gaps": ["gap1", "gap2", ...],
-    "top_contributions": ["contribution1", "contribution2", ...]
-}}""")
+    "main_themes": ["Specific theme 1 with technical detail", "Specific theme 2...", ...],
+    "methodologies": ["Exact method 1", "Exact algorithm 2", "Specific framework 3", ...],
+    "key_findings": ["Concrete finding 1 with details", "Specific result 2", ...],
+    "contradictions": ["Specific contradiction 1 if found", ...],
+    "research_gaps": ["Specific gap 1", "Unanswered question 2", ...],
+    "top_contributions": ["Major contribution 1 with specifics", "Novel technique 2", ...]
+}}
+
+CRITICAL: Every item must be SPECIFIC and SUBSTANTIVE. No generic placeholders.""")
         ])
 
         try:
@@ -193,18 +287,48 @@ Provide output in JSON format:
     ) -> str:
         """Generate essay introduction"""
         intro_prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an academic writer creating research essay introductions."),
-            ("user", """Write a compelling introduction for a research essay on: {query}
+            ("system", """You are a distinguished academic writer specializing in research synthesis.
 
-Context: This essay synthesizes findings from {count} research papers.
+Your introduction must:
+- Hook the reader with significance and relevance
+- Demonstrate deep understanding of the field
+- Use scholarly language with precision
+- Set clear expectations for what follows
+- Be engaging yet rigorous"""),
+            ("user", """WRITE A SCHOLARLY INTRODUCTION for a research synthesis essay
 
-The introduction should:
-- Establish the importance of the topic
-- Provide context and background
-- State the scope of the review
-- Preview main themes
+TOPIC: {query}
+PAPERS ANALYZED: {count}
 
-Write 2-3 well-structured paragraphs.""")
+INTRODUCTION STRUCTURE (3-4 paragraphs, 300-400 words):
+
+PARAGRAPH 1 - SIGNIFICANCE & CONTEXT:
+- Why is this topic critically important?
+- What real-world problems or questions does it address?
+- What is the current state of knowledge?
+- Use compelling but factual language
+
+PARAGRAPH 2 - RESEARCH LANDSCAPE:
+- What major approaches or themes exist in this area?
+- Who are the key researchers or schools of thought?
+- What recent developments have shaped the field?
+- Establish breadth of the research reviewed
+
+PARAGRAPH 3 - SCOPE & OBJECTIVES:
+- What specific aspects does this synthesis cover?
+- What are the key questions addressed?
+- What themes will be explored?
+- What can readers expect to learn?
+
+WRITING GUIDELINES:
+- Use sophisticated academic vocabulary
+- Maintain formal scholarly tone
+- Be specific and concrete (avoid vague generalizations)
+- Support claims with implicit reference to the literature
+- Create logical flow between paragraphs
+- Engage the reader's interest while maintaining rigor
+
+Write a compelling, scholarly introduction that sets the stage for an exceptional research synthesis.""")
         ])
 
         try:
@@ -224,33 +348,102 @@ Write 2-3 well-structured paragraphs.""")
     ) -> str:
         """Generate essay body sections"""
         body_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an academic writer. Create a comprehensive body section for a research essay.
-Organize content into clear thematic sections with proper citations."""),
-            ("user", """Based on this research synthesis, write the main body of the essay:
+            ("system", """You are an EXPERT academic writer with extensive experience in research synthesis and systematic reviews.
+
+Your essay body must:
+- Present a coherent narrative organized by themes
+- Integrate findings from multiple sources
+- Provide critical analysis, not just summary
+- Use specific examples and concrete evidence
+- Maintain scholarly rigor while being readable
+- Include proper academic discourse markers
+- Demonstrate synthesis, comparison, and evaluation"""),
+            ("user", """WRITE THE MAIN BODY of a comprehensive research synthesis essay
+
+═══════════════════════════════════════════════════════════
+SYNTHESIS DATA:
 
 Main Themes: {themes}
+
 Key Findings: {findings}
+
 Methodologies: {methodologies}
+
 Research Gaps: {gaps}
 
-Number of papers analyzed: {count}
+Top Contributions: {contributions}
 
-Create 4-6 well-structured paragraphs organized by themes. Include:
-- Detailed discussion of each theme
-- Supporting evidence from research
-- Comparisons and contrasts
-- Critical analysis
+Papers Analyzed: {count}
+═══════════════════════════════════════════════════════════
 
-Use academic tone and proper structure. Reference papers as [Author, Year] or [Paper N] where appropriate.""")
+BODY STRUCTURE (6-8 paragraphs, 800-1200 words):
+
+Organize content into THEMATIC SECTIONS. For each major theme:
+
+1. INTRODUCE THE THEME:
+   - Present the theme with context
+   - Explain its significance to the research question
+   - Preview what will be discussed
+
+2. SYNTHESIZE FINDINGS:
+   - Integrate findings from multiple papers
+   - Use specific examples and concrete evidence
+   - Compare and contrast different approaches
+   - Highlight consensus and contradictions
+
+3. ANALYZE CRITICALLY:
+   - Evaluate methodological strengths and weaknesses
+   - Discuss implications of findings
+   - Connect findings to broader research context
+   - Identify patterns and trends
+
+4. TRANSITION SMOOTHLY:
+   - Use clear transitions between paragraphs
+   - Build a logical narrative arc
+   - Connect themes to each other where relevant
+
+WRITING REQUIREMENTS:
+
+SPECIFICITY:
+- Use actual methodology names and technical terms
+- Reference concrete findings (not "studies showed...")
+- Include specific examples from the research
+
+ACADEMIC DISCOURSE:
+- Use phrases like: "Research demonstrates...", "Studies consistently indicate...", "Emerging evidence suggests...", "While some scholars argue...", "In contrast...", "Moreover...", "Nevertheless..."
+- Maintain formal scholarly tone
+- Use precise academic vocabulary
+
+SYNTHESIS (NOT SUMMARY):
+- DON'T just list what each paper found
+- DO integrate findings into coherent themes
+- DO compare and contrast approaches
+- DO evaluate significance and implications
+- DO identify patterns across studies
+
+CRITICAL ANALYSIS:
+- Evaluate methodological approaches
+- Discuss limitations where relevant
+- Identify gaps in current knowledge
+- Note contradictions or inconsistencies
+- Assess practical implications
+
+CITATIONS:
+- Reference findings appropriately
+- Use phrases like "research in this area has shown...", "studies have demonstrated...", "evidence indicates..."
+- When discussing specific techniques or findings, indicate this is drawn from the reviewed literature
+
+Write a scholarly, well-integrated body that demonstrates DEEP SYNTHESIS and CRITICAL THINKING.""")
         ])
 
         try:
             chain = body_prompt | self.llm
             response = await chain.ainvoke({
-                "themes": ", ".join(synthesis.get("main_themes", [])),
-                "findings": ", ".join(synthesis.get("key_findings", [])[:5]),
-                "methodologies": ", ".join(synthesis.get("methodologies", [])),
-                "gaps": ", ".join(synthesis.get("research_gaps", [])[:3]),
+                "themes": "\n- ".join(synthesis.get("main_themes", [])),
+                "findings": "\n- ".join(synthesis.get("key_findings", [])),
+                "methodologies": "\n- ".join(synthesis.get("methodologies", [])),
+                "gaps": "\n- ".join(synthesis.get("research_gaps", [])),
+                "contributions": "\n- ".join(synthesis.get("top_contributions", [])),
                 "count": len(analyses)
             })
             return response.content.strip()
@@ -264,29 +457,95 @@ Use academic tone and proper structure. Reference papers as [Author, Year] or [P
     ) -> str:
         """Generate essay conclusion"""
         conclusion_prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an academic writer creating research essay conclusions."),
-            ("user", """Write a conclusion for a research essay on: {query}
+            ("system", """You are an accomplished academic writer specializing in impactful research conclusions.
 
-Key Themes: {themes}
-Main Contributions: {contributions}
-Research Gaps: {gaps}
+Your conclusion must:
+- Synthesize key insights (not just repeat)
+- Emphasize significance and implications
+- Provide forward-looking perspective
+- Leave reader with clear understanding of contribution
+- Maintain scholarly gravitas while being compelling"""),
+            ("user", """WRITE A COMPELLING CONCLUSION for a research synthesis essay
 
-The conclusion should:
-- Summarize main findings
-- Highlight key contributions
-- Discuss implications
-- Suggest future research directions
+═══════════════════════════════════════════════════════════
+TOPIC: {query}
 
-Write 2-3 well-structured paragraphs.""")
+KEY THEMES:
+{themes}
+
+MAIN CONTRIBUTIONS:
+{contributions}
+
+RESEARCH GAPS:
+{gaps}
+
+METHODOLOGIES REVIEWED:
+{methodologies}
+═══════════════════════════════════════════════════════════
+
+CONCLUSION STRUCTURE (3-4 paragraphs, 300-400 words):
+
+PARAGRAPH 1 - SYNTHESIS OF INSIGHTS:
+- Synthesize (don't just summarize) the most important findings
+- What are the overarching insights from this body of research?
+- What patterns or trends emerged across the literature?
+- What do these findings collectively tell us?
+
+PARAGRAPH 2 - SIGNIFICANCE & IMPLICATIONS:
+- Why do these findings matter?
+- What are the theoretical implications?
+- What are the practical implications?
+- How does this advance the field?
+- What problems can now be solved or approached differently?
+
+PARAGRAPH 3 - FUTURE DIRECTIONS:
+- What are the most promising avenues for future research?
+- What questions remain unanswered?
+- What new questions have emerged from this synthesis?
+- How might the field evolve based on current trends?
+
+OPTIONAL PARAGRAPH 4 - BROADER IMPACT (if appropriate):
+- What is the broader significance beyond the immediate field?
+- What interdisciplinary connections exist?
+- What societal or practical impact might this research have?
+
+WRITING REQUIREMENTS:
+
+SYNTHESIS (not summary):
+- Don't repeat what was already said
+- Elevate to higher-level insights
+- Connect dots between themes
+- Show the bigger picture
+
+FORWARD-LOOKING:
+- Be specific about future directions
+- Identify concrete research opportunities
+- Suggest specific methodological advances needed
+- Anticipate emerging trends
+
+IMPACTFUL:
+- Emphasize significance without overstating
+- Use strong but measured language
+- End with a memorable insight
+- Leave reader understanding why this matters
+
+SCHOLARLY TONE:
+- Maintain academic rigor
+- Use sophisticated vocabulary
+- Employ proper academic discourse markers
+- Balance confidence with appropriate hedging
+
+Write a conclusion that provides closure while opening new horizons. Make it intellectually satisfying and professionally impactful.""")
         ])
 
         try:
             chain = conclusion_prompt | self.llm
             response = await chain.ainvoke({
                 "query": query,
-                "themes": ", ".join(synthesis.get("main_themes", [])),
-                "contributions": ", ".join(synthesis.get("top_contributions", [])),
-                "gaps": ", ".join(synthesis.get("research_gaps", []))
+                "themes": "\n- ".join(synthesis.get("main_themes", [])),
+                "contributions": "\n- ".join(synthesis.get("top_contributions", [])),
+                "gaps": "\n- ".join(synthesis.get("research_gaps", [])),
+                "methodologies": "\n- ".join(synthesis.get("methodologies", []))
             })
             return response.content.strip()
         except Exception as e:
@@ -332,13 +591,35 @@ Write 2-3 well-structured paragraphs.""")
 ## References
 
 """
-        # Add references
+        # Add references - extract from citations in each analysis
         for i, analysis in enumerate(analyses, 1):
-            title = analysis.get("title", "Unknown Title")
-            url = analysis.get("source_url", "")
-            essay += f"{i}. {title}\n"
+            # Try to get citation info from the analysis structure
+            citations = analysis.get("citations", [])
+            if citations and len(citations) > 0:
+                citation = citations[0]
+                title = citation.get("title", "Unknown Title")
+                authors = citation.get("authors", "Authors not specified")
+                year = citation.get("year", "Year not specified")
+                url = citation.get("source", "")
+
+                # Format citation
+                if authors != "Information not provided in abstract" and year != "Information not provided in abstract":
+                    essay += f"{i}. {authors} ({year}). {title}\n"
+                else:
+                    essay += f"{i}. {title}\n"
+                    if authors != "Information not provided in abstract":
+                        essay += f"   Authors: {authors}\n"
+                    if year != "Information not provided in abstract":
+                        essay += f"   Year: {year}\n"
+            else:
+                # Fallback to analysis-level data
+                title = analysis.get("title", analysis.get("summary", "Unknown Title")[:100])
+                essay += f"{i}. {title}\n"
+                url = analysis.get("source_url", "")
+
             if url:
-                essay += f"   {url}\n"
+                essay += f"   URL: {url}\n"
+            essay += "\n"
 
         essay += f"\n---\n\n*This essay was generated by AURA - Autonomous Unified Research Assistant*\n"
         essay += f"*Generated with Claude Code (https://claude.com/claude-code)*\n"

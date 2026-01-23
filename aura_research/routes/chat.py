@@ -16,6 +16,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str
     conversation_id: Optional[str] = None
+    language: Optional[str] = "English"
 
 
 class ChatResponse(BaseModel):
@@ -60,7 +61,8 @@ async def chat(request: ChatRequest):
         # Process message
         result = await chatbot.chat(
             message=request.message,
-            conversation_id=request.conversation_id
+            conversation_id=request.conversation_id,
+            language=request.language or "English"
         )
 
         return ChatResponse(**result)
@@ -130,10 +132,10 @@ async def clear_chat_session(session_id: str):
 @router.get("/sessions")
 async def list_sessions():
     """
-    List available research sessions
+    List available research sessions with query names
 
     Returns:
-        List of session IDs
+        List of sessions with session_id, query, and timestamp
 
     Example:
         ```
@@ -143,16 +145,44 @@ async def list_sessions():
     try:
         from pathlib import Path
         from ..utils.config import ANALYSIS_DIR
+        import json
+        from datetime import datetime
 
         analysis_dir = Path(ANALYSIS_DIR)
         sessions = []
 
-        for file in analysis_dir.glob("research_*.json"):
+        for file in sorted(analysis_dir.glob("research_*.json"), reverse=True):
             session_id = file.stem.replace("research_", "")
-            sessions.append({
-                "session_id": session_id,
-                "file": str(file.name)
-            })
+
+            try:
+                # Load research data to get query
+                with open(file, 'r', encoding='utf-8') as f:
+                    research_data = json.load(f)
+
+                query = research_data.get("query", "Unknown Query")
+
+                # Parse timestamp from session_id (format: YYYYMMDD_HHMMSS)
+                try:
+                    timestamp = datetime.strptime(session_id, "%Y%m%d_%H%M%S")
+                    formatted_date = timestamp.strftime("%B %d, %Y at %I:%M %p")
+                except:
+                    formatted_date = session_id
+
+                sessions.append({
+                    "session_id": session_id,
+                    "query": query,
+                    "date": formatted_date,
+                    "file": str(file.name)
+                })
+            except Exception as e:
+                # Fallback if file can't be read
+                print(f"[Chat] Error reading session file {file}: {str(e)}")
+                sessions.append({
+                    "session_id": session_id,
+                    "query": "Error loading query",
+                    "date": session_id,
+                    "file": str(file.name)
+                })
 
         return {
             "sessions": sessions,
