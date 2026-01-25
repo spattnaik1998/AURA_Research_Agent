@@ -4,12 +4,29 @@ Handles user authentication, JWT tokens, and password hashing
 """
 
 import os
+import re
 import hashlib
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 import jwt
 from ..database.repositories import UserRepository, AuditLogRepository
+
+
+# Password validation constants
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_REQUIREMENTS = {
+    "min_length": 8,
+    "require_uppercase": True,
+    "require_lowercase": True,
+    "require_digit": True,
+    "require_special": True
+}
+
+# Email validation regex
+EMAIL_REGEX = re.compile(
+    r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+)
 
 
 # JWT Configuration
@@ -42,6 +59,87 @@ class AuthService:
         self.audit = AuditLogRepository()
         self._initialized = True
         print("[AuthService] Authentication service initialized")
+
+    # ==================== Validation Methods ====================
+
+    def validate_email(self, email: str) -> Tuple[bool, str]:
+        """
+        Validate email format.
+
+        Args:
+            email: Email address to validate
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not email:
+            return False, "Email is required"
+
+        if len(email) > 255:
+            return False, "Email must be less than 255 characters"
+
+        if not EMAIL_REGEX.match(email):
+            return False, "Invalid email format. Please enter a valid email address"
+
+        return True, ""
+
+    def validate_password(self, password: str) -> Tuple[bool, str]:
+        """
+        Validate password strength.
+
+        Requirements:
+        - At least 8 characters
+        - At least one uppercase letter
+        - At least one lowercase letter
+        - At least one digit
+        - At least one special character
+
+        Args:
+            password: Password to validate
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not password:
+            return False, "Password is required"
+
+        errors = []
+
+        if len(password) < PASSWORD_MIN_LENGTH:
+            errors.append(f"at least {PASSWORD_MIN_LENGTH} characters")
+
+        if PASSWORD_REQUIREMENTS["require_uppercase"] and not re.search(r'[A-Z]', password):
+            errors.append("one uppercase letter")
+
+        if PASSWORD_REQUIREMENTS["require_lowercase"] and not re.search(r'[a-z]', password):
+            errors.append("one lowercase letter")
+
+        if PASSWORD_REQUIREMENTS["require_digit"] and not re.search(r'\d', password):
+            errors.append("one number")
+
+        if PASSWORD_REQUIREMENTS["require_special"] and not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/~`]', password):
+            errors.append("one special character (!@#$%^&*)")
+
+        if errors:
+            return False, f"Password must contain {', '.join(errors)}"
+
+        return True, ""
+
+    def get_password_requirements(self) -> Dict[str, Any]:
+        """
+        Get password requirements for frontend display.
+
+        Returns:
+            Dictionary of password requirements
+        """
+        return {
+            "min_length": PASSWORD_MIN_LENGTH,
+            "require_uppercase": PASSWORD_REQUIREMENTS["require_uppercase"],
+            "require_lowercase": PASSWORD_REQUIREMENTS["require_lowercase"],
+            "require_digit": PASSWORD_REQUIREMENTS["require_digit"],
+            "require_special": PASSWORD_REQUIREMENTS["require_special"],
+            "message": f"Password must be at least {PASSWORD_MIN_LENGTH} characters with uppercase, lowercase, number, and special character"
+        }
 
     # ==================== Password Methods ====================
 
@@ -228,15 +326,25 @@ class AuthService:
         Returns:
             Result with user info and tokens or error
         """
-        # Validate input
+        # Validate username
         if not username or len(username) < 3:
             return {"success": False, "error": "Username must be at least 3 characters"}
 
-        if not email or "@" not in email:
-            return {"success": False, "error": "Invalid email address"}
+        if len(username) > 100:
+            return {"success": False, "error": "Username must be less than 100 characters"}
 
-        if not password or len(password) < 6:
-            return {"success": False, "error": "Password must be at least 6 characters"}
+        if not re.match(r'^[a-zA-Z0-9_]+$', username):
+            return {"success": False, "error": "Username can only contain letters, numbers, and underscores"}
+
+        # Validate email
+        email_valid, email_error = self.validate_email(email)
+        if not email_valid:
+            return {"success": False, "error": email_error}
+
+        # Validate password strength
+        password_valid, password_error = self.validate_password(password)
+        if not password_valid:
+            return {"success": False, "error": password_error}
 
         # Check if username exists
         if self.users.username_exists(username):
@@ -440,9 +548,10 @@ class AuthService:
         if not self.verify_password(current_password, user["password_hash"]):
             return {"success": False, "error": "Current password is incorrect"}
 
-        # Validate new password
-        if len(new_password) < 6:
-            return {"success": False, "error": "New password must be at least 6 characters"}
+        # Validate new password strength
+        password_valid, password_error = self.validate_password(new_password)
+        if not password_valid:
+            return {"success": False, "error": password_error}
 
         try:
             # Hash new password

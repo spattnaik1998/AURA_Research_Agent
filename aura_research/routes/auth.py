@@ -348,6 +348,23 @@ async def change_password(
     return MessageResponse(success=True, message=result["message"])
 
 
+@router.get("/password-requirements")
+async def get_password_requirements():
+    """
+    Get password requirements for registration
+
+    Returns:
+        Password requirements and validation rules
+
+    Example:
+        ```
+        GET /auth/password-requirements
+        ```
+    """
+    auth_service = get_auth_service()
+    return auth_service.get_password_requirements()
+
+
 @router.get("/verify")
 async def verify_token(user: Dict[str, Any] = Depends(get_current_user)):
     """
