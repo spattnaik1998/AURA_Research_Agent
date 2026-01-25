@@ -114,3 +114,19 @@ nul
 
 # Signal files
 *.signal
+
+# Claude Code settings
+.claude/
+
+# Screenshots and images (project-specific)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+
+# Package lock files (optional - uncomment if you want to track)
+# package-lock.json
+
+# Skill/documentation files (project-specific)
+SKILL.md

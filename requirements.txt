@@ -26,3 +26,9 @@ pydantic-settings>=2.1.0
 # Utilities
 aiohttp>=3.9.0
 requests>=2.31.0
+
+# Database
+pyodbc>=4.0.35
+
+# Authentication
+PyJWT>=2.8.0

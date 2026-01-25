@@ -10,13 +10,182 @@ let pollingInterval = null;
 let currentInputMode = 'text'; // 'text' or 'image'
 let uploadedImageData = null;
 let extractedQuery = null;
+let currentUser = null;
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check authentication first
+    const isAuthenticated = await checkAuthentication();
+    if (!isAuthenticated) {
+        // Redirect to landing page
+        window.location.href = '/landing.html';
+        return;
+    }
+
+    // Display user info
+    displayUserInfo();
+
+    // Initialize app
     initializeTheme();
     checkBackendConnection();
     loadAvailableSessions();
 });
+
+/**
+ * Check if user is authenticated
+ */
+async function checkAuthentication() {
+    const token = localStorage.getItem('aura_access_token');
+
+    if (!token) {
+        return false;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.valid && data.user) {
+            currentUser = data.user;
+            localStorage.setItem('aura_user', JSON.stringify(data.user));
+            return true;
+        } else {
+            // Try to refresh the token
+            const refreshed = await refreshAccessToken();
+            return refreshed;
+        }
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        return false;
+    }
+}
+
+/**
+ * Refresh access token using refresh token
+ */
+async function refreshAccessToken() {
+    const refreshToken = localStorage.getItem('aura_refresh_token');
+
+    if (!refreshToken) {
+        return false;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ refresh_token: refreshToken })
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem('aura_access_token', data.access_token);
+            localStorage.setItem('aura_refresh_token', data.refresh_token);
+            return true;
+        } else {
+            // Refresh failed, clear tokens
+            clearAuthTokens();
+            return false;
+        }
+    } catch (error) {
+        console.error('Token refresh failed:', error);
+        return false;
+    }
+}
+
+/**
+ * Get authorization headers for API requests
+ */
+function getAuthHeaders() {
+    const token = localStorage.getItem('aura_access_token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
+/**
+ * Display user info in the header
+ */
+function displayUserInfo() {
+    const user = currentUser || JSON.parse(localStorage.getItem('aura_user') || 'null');
+
+    if (user) {
+        // Create user info element if it doesn't exist
+        let userInfoDiv = document.getElementById('user-info');
+
+        if (!userInfoDiv) {
+            // Find the header and add user info
+            const header = document.querySelector('header .flex.items-center.space-x-4');
+            if (header) {
+                userInfoDiv = document.createElement('div');
+                userInfoDiv.id = 'user-info';
+                userInfoDiv.className = 'flex items-center space-x-2';
+                userInfoDiv.innerHTML = `
+                    <div class="flex items-center space-x-2 px-3 py-2 rounded-lg" style="background-color: var(--bg-tertiary);">
+                        <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-semibold" style="background-color: #1E40AF;">
+                            ${(user.username || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <span class="text-sm font-medium themed-text-secondary">
+                            ${user.full_name || user.username}
+                        </span>
+                    </div>
+                    <button onclick="logout()" class="p-2 rounded-lg transition" style="color: var(--text-secondary);" onmouseover="this.style.backgroundColor='var(--bg-tertiary)'" onmouseout="this.style.backgroundColor='transparent'" title="Logout">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </button>
+                `;
+                header.insertBefore(userInfoDiv, header.firstChild);
+            }
+        }
+    }
+}
+
+/**
+ * Logout user
+ */
+async function logout() {
+    const token = localStorage.getItem('aura_access_token');
+
+    if (token) {
+        try {
+            await fetch(`${API_BASE_URL}/auth/logout`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+        } catch (error) {
+            console.error('Logout API call failed:', error);
+        }
+    }
+
+    clearAuthTokens();
+    window.location.href = '/landing.html';
+}
+
+/**
+ * Clear authentication tokens
+ */
+function clearAuthTokens() {
+    localStorage.removeItem('aura_access_token');
+    localStorage.removeItem('aura_refresh_token');
+    localStorage.removeItem('aura_user');
+    currentUser = null;
+}
+
+/**
+ * Get current user ID for API requests
+ */
+function getCurrentUserId() {
+    const user = currentUser || JSON.parse(localStorage.getItem('aura_user') || 'null');
+    return user ? user.user_id : null;
+}
 
 /**
  * Initialize theme from localStorage or system preference
@@ -83,24 +252,19 @@ async function checkBackendConnection() {
         const response = await fetch(`${API_BASE_URL}/health`);
         if (response.ok) {
             statusDiv.innerHTML = `
-                <div class="relative flex items-center justify-center">
-                    <div class="absolute w-3 h-3 rounded-full bg-green-400 animate-ping"></div>
-                    <div class="w-3 h-3 rounded-full bg-green-500 shadow-sm"></div>
-                </div>
-                <span class="text-sm font-semibold text-green-700">Connected</span>
+                <div class="w-2 h-2 rounded-full" style="background-color: #22C55E;"></div>
+                <span class="text-xs font-medium" style="color: #166534;">Connected</span>
             `;
-            statusDiv.className = 'flex items-center space-x-3 px-4 py-2 rounded-full bg-green-100 shadow-sm border border-green-200';
+            statusDiv.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; border-radius: 9999px; background-color: #F0FDF4; border: 1px solid #BBF7D0;';
         } else {
             throw new Error('Backend not responding');
         }
     } catch (error) {
         statusDiv.innerHTML = `
-            <div class="relative flex items-center justify-center">
-                <div class="w-3 h-3 rounded-full bg-red-500"></div>
-            </div>
-            <span class="text-sm font-semibold text-red-700">Disconnected</span>
+            <div class="w-2 h-2 rounded-full" style="background-color: #EF4444;"></div>
+            <span class="text-xs font-medium" style="color: #991B1B;">Disconnected</span>
         `;
-        statusDiv.className = 'flex items-center space-x-3 px-4 py-2 rounded-full bg-red-100 shadow-sm border border-red-200';
+        statusDiv.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; border-radius: 9999px; background-color: #FEF2F2; border: 1px solid #FECACA;';
         console.error('Backend connection error:', error);
     }
 }
@@ -289,8 +453,12 @@ async function startResearch() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...getAuthHeaders()
             },
-            body: JSON.stringify({ query: query })
+            body: JSON.stringify({
+                query: query,
+                user_id: getCurrentUserId()
+            })
         });
 
         if (!response.ok) {
@@ -327,23 +495,22 @@ function updateProgressStep(stepId, status) {
     const step = document.getElementById(stepId);
     const circle = step.querySelector('.w-12');
 
+    // Reset all classes first
+    step.className = 'progress-step p-4 rounded-xl transition-all';
+    circle.className = 'relative w-12 h-12 rounded-full flex items-center justify-center';
+
     if (status === 'active') {
-        step.classList.remove('bg-gray-50', 'bg-green-50');
-        step.classList.add('bg-gradient-to-r', 'from-primary-50', 'to-accent-50', 'border-2', 'border-primary-300');
-        circle.classList.remove('bg-gray-200', 'bg-green-500');
-        circle.classList.add('bg-gradient-to-br', 'from-primary-500', 'to-primary-600', 'shadow-glow');
+        step.style.cssText = 'background-color: #DBEAFE; border: 1px solid #93C5FD;';
+        circle.style.cssText = 'background-color: #1E40AF;';
         circle.innerHTML = '<div class="w-4 h-4 bg-white rounded-full animate-pulse"></div>';
     } else if (status === 'complete') {
-        step.classList.remove('bg-gray-50', 'bg-gradient-to-r', 'from-primary-50', 'to-accent-50', 'border-primary-300');
-        step.classList.add('bg-green-50', 'border-2', 'border-green-300');
-        circle.classList.remove('bg-gray-200', 'bg-primary-500', 'from-primary-500', 'to-primary-600', 'shadow-glow');
-        circle.classList.add('bg-gradient-to-br', 'from-green-500', 'to-green-600');
+        step.style.cssText = 'background-color: #F0FDF4; border: 1px solid #BBF7D0;';
+        circle.style.cssText = 'background-color: #22C55E;';
         circle.innerHTML = '<svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>';
     } else {
-        step.classList.remove('bg-gradient-to-r', 'from-primary-50', 'to-accent-50', 'bg-green-50', 'border-2', 'border-primary-300', 'border-green-300');
-        step.classList.add('bg-gray-50');
-        circle.classList.remove('bg-gradient-to-br', 'from-primary-500', 'to-primary-600', 'from-green-500', 'to-green-600', 'shadow-glow');
-        circle.classList.add('bg-gray-200');
+        step.style.cssText = 'background-color: #F5F5F5; border: 1px solid #E5E7EB;';
+        circle.style.cssText = 'background-color: #E5E7EB;';
+        // Keep original number content
     }
 }
 
@@ -445,12 +612,14 @@ async function sendMessage() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...getAuthHeaders()
             },
             body: JSON.stringify({
                 message: message,
                 session_id: currentSessionId,
                 conversation_id: currentConversationId,
-                language: selectedLanguage
+                language: selectedLanguage,
+                user_id: getCurrentUserId()
             })
         });
 
@@ -491,24 +660,25 @@ function addMessageToChat(role, content) {
     if (role === 'user') {
         messageDiv.className = 'chat-message user';
         messageDiv.innerHTML = `
-            <p class="text-sm font-medium text-gray-700 mb-1">You</p>
-            <p class="text-sm text-gray-900">${escapeHtml(content)}</p>
+            <p class="text-xs font-semibold text-blue-800 mb-1">You</p>
+            <p class="text-sm text-gray-800">${escapeHtml(content)}</p>
         `;
     } else if (role === 'assistant') {
         messageDiv.className = 'chat-message assistant';
         messageDiv.innerHTML = `
-            <div class="flex items-center gap-2 mb-3">
-                <div class="w-8 h-8 bg-gradient-to-br from-primary-500 to-accent-500 rounded-lg flex items-center justify-center shadow-sm">
-                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="flex items-center gap-2 mb-2">
+                <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background-color: #1E40AF;">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
                     </svg>
                 </div>
-                <p class="text-sm font-semibold text-gray-800">AURA Assistant</p>
+                <p class="text-xs font-semibold text-gray-700">AURA Assistant</p>
             </div>
-            <div class="assistant-response text-sm text-gray-900 whitespace-pre-wrap leading-relaxed">${formatMarkdown(content)}</div>
+            <div class="assistant-response text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">${formatMarkdown(content)}</div>
         `;
     } else if (role === 'error') {
-        messageDiv.className = 'p-3 bg-red-50 border border-red-200 rounded-lg';
+        messageDiv.className = 'p-3 rounded-lg';
+        messageDiv.style.cssText = 'background-color: #FEF2F2; border: 1px solid #FECACA;';
         messageDiv.innerHTML = `
             <p class="text-sm text-red-800">${escapeHtml(content)}</p>
         `;
@@ -527,17 +697,17 @@ function formatMarkdown(text) {
     let formatted = escapeHtml(text);
 
     // Format headers (##)
-    formatted = formatted.replace(/^## (.+)$/gm, '<h3 class="text-base font-bold text-gray-900 mt-4 mb-2 first:mt-0">$1</h3>');
+    formatted = formatted.replace(/^## (.+)$/gm, '<h3 class="text-base font-semibold text-gray-900 mt-3 mb-2 first:mt-0">$1</h3>');
 
     // Format bold (**text**)
     formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>');
 
     // Format bullet points (• or -)
-    formatted = formatted.replace(/^[•\-] (.+)$/gm, '<div class="flex gap-2 ml-4 my-1"><span class="text-primary-600">•</span><span>$1</span></div>');
+    formatted = formatted.replace(/^[•\-] (.+)$/gm, '<div class="flex gap-2 ml-4 my-1"><span style="color: #1E40AF;">•</span><span>$1</span></div>');
 
     // Format checkmarks and X marks
-    formatted = formatted.replace(/✓/g, '<span class="text-green-600 font-bold">✓</span>');
-    formatted = formatted.replace(/✗/g, '<span class="text-red-600 font-bold">✗</span>');
+    formatted = formatted.replace(/✓/g, '<span style="color: #16A34A; font-weight: 600;">✓</span>');
+    formatted = formatted.replace(/✗/g, '<span style="color: #DC2626; font-weight: 600;">✗</span>');
 
     return formatted;
 }
@@ -552,21 +722,19 @@ function addThinkingIndicator() {
     thinkingDiv.id = 'thinking-indicator';
     thinkingDiv.className = 'chat-message assistant';
     thinkingDiv.innerHTML = `
-        <p class="text-sm font-medium text-gray-700 mb-3">AURA Assistant</p>
+        <div class="flex items-center gap-2 mb-2">
+            <div class="w-7 h-7 rounded-lg flex items-center justify-center" style="background-color: #1E40AF;">
+                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                </svg>
+            </div>
+            <p class="text-xs font-semibold text-gray-700">AURA Assistant</p>
+        </div>
         <div class="thinking-indicator">
             <div class="orbital-system">
-                <!-- Orbits -->
-                <div class="orbit orbit-1">
-                    <div class="planet planet-1"></div>
-                </div>
-                <div class="orbit orbit-2">
-                    <div class="planet planet-2"></div>
-                </div>
-                <div class="orbit orbit-3">
-                    <div class="planet planet-3"></div>
-                </div>
-                <!-- Central core -->
-                <div class="core"></div>
+                <div class="orbit orbit-1"></div>
+                <div class="orbit orbit-2"></div>
+                <div class="orbit orbit-3"></div>
             </div>
             <div class="thinking-dots">
                 <div class="dot"></div>
@@ -764,24 +932,44 @@ function handleResearchFailed(status) {
 function showNotification(message, type = 'info') {
     // Create notification element
     const notification = document.createElement('div');
-    notification.className = `fixed top-24 right-4 p-5 rounded-2xl shadow-2xl z-50 animate-slide-up ${
-        type === 'success' ? 'bg-gradient-to-r from-green-100 to-green-50 border-2 border-green-400 text-green-800' :
-        type === 'error' ? 'bg-gradient-to-r from-red-100 to-red-50 border-2 border-red-400 text-red-800' :
-        'bg-gradient-to-r from-blue-100 to-blue-50 border-2 border-blue-400 text-blue-800'
-    }`;
+
+    // Use clean, single-color design
+    let bgColor, borderColor, textColor;
+    if (type === 'success') {
+        bgColor = '#F0FDF4';
+        borderColor = '#22C55E';
+        textColor = '#166534';
+    } else if (type === 'error') {
+        bgColor = '#FEF2F2';
+        borderColor = '#EF4444';
+        textColor = '#991B1B';
+    } else {
+        bgColor = '#DBEAFE';
+        borderColor = '#1E40AF';
+        textColor = '#1E40AF';
+    }
+
+    notification.className = 'fixed top-20 right-4 p-4 rounded-lg z-50';
+    notification.style.cssText = `
+        background-color: ${bgColor};
+        border: 1px solid ${borderColor};
+        color: ${textColor};
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        animation: slideUp 0.3s ease-out;
+    `;
 
     const icon = type === 'success' ?
-        '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>' :
+        '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path></svg>' :
         type === 'error' ?
-        '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>' :
-        '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>';
+        '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path></svg>' :
+        '<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>';
 
     notification.innerHTML = `
         <div class="flex items-center space-x-3">
             ${icon}
-            <span class="text-sm font-semibold flex-1">${escapeHtml(message)}</span>
-            <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-gray-600 hover:text-gray-900 transition-colors">
-                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <span class="text-sm font-medium flex-1">${escapeHtml(message)}</span>
+            <button onclick="this.parentElement.parentElement.remove()" class="ml-3 opacity-60 hover:opacity-100 transition-opacity">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
                 </svg>
             </button>
@@ -793,9 +981,9 @@ function showNotification(message, type = 'info') {
     // Auto-remove after 5 seconds with fade-out animation
     setTimeout(() => {
         notification.style.opacity = '0';
-        notification.style.transform = 'translateY(-20px)';
-        notification.style.transition = 'all 0.3s ease-out';
-        setTimeout(() => notification.remove(), 300);
+        notification.style.transform = 'translateY(-10px)';
+        notification.style.transition = 'all 0.2s ease-out';
+        setTimeout(() => notification.remove(), 200);
     }, 5000);
 }
 

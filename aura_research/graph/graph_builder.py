@@ -34,7 +34,8 @@ class GraphBuilder:
         analyses = self._extract_analyses(session_data)
 
         if not analyses:
-            return {"nodes": [], "edges": [], "error": "No analyses found"}
+            print("[GraphBuilder] No analyses found, returning empty graph")
+            return {"nodes": [], "edges": [], "stats": {"total_nodes": 0, "total_edges": 0}}
 
         # Build different node types
         await self._build_paper_nodes(analyses)
@@ -55,7 +56,17 @@ class GraphBuilder:
         """Extract all paper analyses from session data"""
         analyses = []
 
-        # Get subordinate results
+        # Try direct analyses array first (database format)
+        if "analyses" in session_data and isinstance(session_data["analyses"], list):
+            for analysis in session_data["analyses"]:
+                # Normalize database format to expected format
+                normalized = self._normalize_analysis(analysis)
+                if normalized:
+                    analyses.append(normalized)
+            if analyses:
+                return analyses
+
+        # Fallback to subordinate results (JSON file format)
         subordinate_results = session_data.get("subordinate_results", [])
 
         for result in subordinate_results:
@@ -65,6 +76,35 @@ class GraphBuilder:
                 analyses.extend(result_analyses)
 
         return analyses
+
+    def _normalize_analysis(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize analysis from database format to expected format"""
+        if not analysis:
+            return None
+
+        # If already in expected format, return as is
+        if "summary" in analysis and "metadata" in analysis:
+            return analysis
+
+        # Convert database format
+        return {
+            "summary": analysis.get("summary", ""),
+            "key_points": analysis.get("key_points", []) if isinstance(analysis.get("key_points"), list) else [],
+            "citations": [{
+                "title": analysis.get("paper_title", "Unknown"),
+                "authors": analysis.get("paper_authors", "Unknown") if analysis.get("paper_authors") else analysis.get("authors", "Unknown"),
+                "year": analysis.get("year", "N/A"),
+                "source": analysis.get("url", "")
+            }],
+            "metadata": {
+                "core_ideas": analysis.get("core_ideas", []) if isinstance(analysis.get("core_ideas"), list) else [],
+                "key_findings": analysis.get("key_findings", []) if isinstance(analysis.get("key_findings"), list) else [],
+                "methodology": analysis.get("methodology", ""),
+                "relevance_score": analysis.get("relevance_score", 5),
+                "research_domain": analysis.get("research_domain", "Research"),
+                "technical_depth": analysis.get("technical_depth", "applied")
+            }
+        }
 
     async def _build_paper_nodes(self, analyses: List[Dict[str, Any]]):
         """Create nodes for each research paper"""
@@ -108,6 +148,14 @@ class GraphBuilder:
         for idx, analysis in enumerate(analyses):
             metadata = analysis.get("metadata", {})
             core_ideas = metadata.get("core_ideas", [])
+
+            # Fallback: use key_findings if core_ideas is empty
+            if not core_ideas:
+                core_ideas = metadata.get("key_findings", [])
+
+            # Fallback: use key_points if still empty
+            if not core_ideas:
+                core_ideas = analysis.get("key_points", [])
 
             for idea in core_ideas:
                 # Clean and normalize concept
@@ -211,6 +259,12 @@ class GraphBuilder:
             paper_id = f"paper_{idx}"
             metadata = analysis.get("metadata", {})
             core_ideas = metadata.get("core_ideas", [])
+
+            # Fallback: use key_findings if core_ideas is empty
+            if not core_ideas:
+                core_ideas = metadata.get("key_findings", [])
+            if not core_ideas:
+                core_ideas = analysis.get("key_points", [])
 
             # Link papers to concepts
             for idea in core_ideas:

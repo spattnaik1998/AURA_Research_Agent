@@ -28,6 +28,11 @@ VECTOR_STORE_DIR.mkdir(exist_ok=True)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
+# Database Configuration
+DB_SERVER = os.getenv("DB_SERVER", "LAPTOP-FO95TROJ")
+DB_DATABASE = os.getenv("DB_DATABASE", "AURA_Research")
+DB_DRIVER = os.getenv("DB_DRIVER", "{ODBC Driver 17 for SQL Server}")
+
 # Agent Configuration
 MAX_SUBORDINATE_AGENTS = 5
 BATCH_SIZE = 10  # Papers per agent

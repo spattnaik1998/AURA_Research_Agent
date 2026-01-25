@@ -1,5 +1,6 @@
 """
 Knowledge Graph API Routes
+Integrated with SQL Server database
 """
 
 from fastapi import APIRouter, HTTPException
@@ -10,10 +11,11 @@ import os
 from ..graph.graph_builder import GraphBuilder
 from ..graph.graph_analyzer import GraphAnalyzer
 from ..utils.config import ANALYSIS_DIR
+from ..services.db_service import get_db_service
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
-# In-memory cache for generated graphs
+# In-memory cache for generated graphs (for performance)
 graph_cache = {}
 
 
@@ -24,32 +26,54 @@ class PathRequest(BaseModel):
 
 
 @router.post("/build/{session_id}")
-async def build_graph(session_id: str):
+async def build_graph(session_id: str, user_id: Optional[int] = None):
     """
     Build knowledge graph from research session
 
     Args:
         session_id: Research session ID
+        user_id: Optional user ID for audit
 
     Returns:
         Graph data with nodes and edges
     """
+    db_service = get_db_service()
+
     try:
-        # Load session data
-        session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
+        # Try to load session data from database first
+        session = db_service.get_session_details(session_id)
 
-        if not os.path.exists(session_file):
-            raise HTTPException(status_code=404, detail="Research session not found")
+        if session:
+            # Get analyses from database
+            analyses = db_service.get_session_analyses(session_id)
+            essay = db_service.get_session_essay(session_id)
 
-        with open(session_file, 'r', encoding='utf-8') as f:
-            session_data = json.load(f)
+            print(f"[Graph] Loaded {len(analyses)} analyses from database for session {session_id}")
+
+            session_data = {
+                'query': session['query'],
+                'analyses': analyses if analyses else [],
+                'essay': essay.get('full_content') if essay else None
+            }
+        else:
+            # Fallback to file-based data
+            session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
+
+            if not os.path.exists(session_file):
+                raise HTTPException(status_code=404, detail="Research session not found")
+
+            with open(session_file, 'r', encoding='utf-8') as f:
+                session_data = json.load(f)
 
         # Build graph
         builder = GraphBuilder()
         graph_data = await builder.build_from_session(session_data)
 
-        if "error" in graph_data:
-            raise HTTPException(status_code=400, detail=graph_data["error"])
+        # Save to database (non-fatal)
+        try:
+            db_service.save_graph(session_id, graph_data, user_id)
+        except Exception as e:
+            print(f"[Graph] Warning: Failed to save graph to DB: {e}")
 
         # Cache the graph
         graph_cache[session_id] = graph_data
@@ -58,7 +82,11 @@ async def build_graph(session_id: str):
             "success": True,
             "session_id": session_id,
             "graph": graph_data,
-            "message": "Knowledge graph built successfully"
+            "message": "Knowledge graph built and saved successfully",
+            "stats": {
+                "nodes": len(graph_data.get('nodes', [])),
+                "edges": len(graph_data.get('edges', []))
+            }
         }
 
     except FileNotFoundError:
@@ -78,6 +106,8 @@ async def get_graph_data(session_id: str):
     Returns:
         Graph data
     """
+    db_service = get_db_service()
+
     try:
         # Check cache first
         if session_id in graph_cache:
@@ -85,33 +115,70 @@ async def get_graph_data(session_id: str):
                 "success": True,
                 "session_id": session_id,
                 "graph": graph_cache[session_id],
-                "cached": True
+                "source": "cache"
             }
 
-        # Try to build if not cached
+        # Check database for existing graph
+        try:
+            db_graph = db_service.get_session_graph(session_id)
+            if db_graph:
+                graph_cache[session_id] = db_graph
+                return {
+                    "success": True,
+                    "session_id": session_id,
+                    "graph": db_graph,
+                    "source": "database"
+                }
+        except Exception as e:
+            print(f"[Graph] DB graph lookup failed: {e}")
+
+        # Try to build from file or database
+        session_data = None
         session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
 
-        if not os.path.exists(session_file):
-            raise HTTPException(status_code=404, detail="Research session not found")
+        if os.path.exists(session_file):
+            with open(session_file, 'r', encoding='utf-8') as f:
+                session_data = json.load(f)
+        else:
+            # Try database
+            try:
+                session = db_service.get_session_details(session_id)
+                if session:
+                    analyses = db_service.get_session_analyses(session_id)
+                    essay = db_service.get_session_essay(session_id)
+                    session_data = {
+                        'query': session['query'],
+                        'analyses': analyses if analyses else [],
+                        'essay': essay.get('full_content') if essay else None
+                    }
+            except Exception as e:
+                print(f"[Graph] DB session lookup failed: {e}")
 
-        with open(session_file, 'r', encoding='utf-8') as f:
-            session_data = json.load(f)
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Research session not found")
 
         # Build graph
         builder = GraphBuilder()
         graph_data = await builder.build_from_session(session_data)
 
-        # Cache it
+        # Save to cache (DB save is non-fatal)
         graph_cache[session_id] = graph_data
+        try:
+            db_service.save_graph(session_id, graph_data)
+        except Exception as e:
+            print(f"[Graph] Warning: Failed to save graph to DB: {e}")
 
         return {
             "success": True,
             "session_id": session_id,
             "graph": graph_data,
-            "cached": False
+            "source": "built"
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
+        print(f"[Graph] Error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve graph: {str(e)}")
 
 
@@ -126,27 +193,19 @@ async def analyze_graph(session_id: str):
     Returns:
         Analysis results with metrics and insights
     """
+    db_service = get_db_service()
+
     try:
         # Get graph data
-        if session_id not in graph_cache:
-            # Build graph first
-            session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
-
-            if not os.path.exists(session_file):
-                raise HTTPException(status_code=404, detail="Research session not found")
-
-            with open(session_file, 'r', encoding='utf-8') as f:
-                session_data = json.load(f)
-
-            builder = GraphBuilder()
-            graph_data = await builder.build_from_session(session_data)
-            graph_cache[session_id] = graph_data
-        else:
-            graph_data = graph_cache[session_id]
+        graph_data = await _get_or_build_graph(session_id, db_service)
 
         # Analyze graph
         analyzer = GraphAnalyzer(graph_data)
         analysis_results = analyzer.analyze()
+
+        # Update centrality in database if available
+        if analysis_results.get('centrality'):
+            db_service.update_graph_centrality(session_id, analysis_results['centrality'])
 
         return {
             "success": True,
@@ -170,15 +229,11 @@ async def find_path(session_id: str, path_request: PathRequest):
     Returns:
         Path information
     """
+    db_service = get_db_service()
+
     try:
         # Get graph data
-        if session_id not in graph_cache:
-            raise HTTPException(
-                status_code=404,
-                detail="Graph not found. Please build graph first."
-            )
-
-        graph_data = graph_cache[session_id]
+        graph_data = await _get_or_build_graph(session_id, db_service)
 
         # Find path
         analyzer = GraphAnalyzer(graph_data)
@@ -208,23 +263,11 @@ async def get_clusters(session_id: str):
     Returns:
         Community detection results
     """
+    db_service = get_db_service()
+
     try:
         # Get graph data
-        if session_id not in graph_cache:
-            # Build graph first
-            session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
-
-            if not os.path.exists(session_file):
-                raise HTTPException(status_code=404, detail="Research session not found")
-
-            with open(session_file, 'r', encoding='utf-8') as f:
-                session_data = json.load(f)
-
-            builder = GraphBuilder()
-            graph_data = await builder.build_from_session(session_data)
-            graph_cache[session_id] = graph_data
-        else:
-            graph_data = graph_cache[session_id]
+        graph_data = await _get_or_build_graph(session_id, db_service)
 
         # Detect communities
         analyzer = GraphAnalyzer(graph_data)
@@ -253,36 +296,65 @@ async def get_central_nodes(session_id: str, top_k: int = 10):
     Returns:
         Central nodes by different metrics
     """
+    db_service = get_db_service()
+
     try:
-        # Get graph data
-        if session_id not in graph_cache:
-            # Build graph first
-            session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
+        # Try to get from database first
+        db_session_id = db_service.get_session_id(session_id)
+        if db_session_id:
+            central_nodes = db_service.graph.get_central_nodes(db_session_id, limit=top_k)
+            if central_nodes:
+                return {
+                    "success": True,
+                    "session_id": session_id,
+                    "central_nodes": central_nodes,
+                    "source": "database"
+                }
 
-            if not os.path.exists(session_file):
-                raise HTTPException(status_code=404, detail="Research session not found")
+        # Fallback to computed analysis
+        graph_data = await _get_or_build_graph(session_id, db_service)
 
-            with open(session_file, 'r', encoding='utf-8') as f:
-                session_data = json.load(f)
-
-            builder = GraphBuilder()
-            graph_data = await builder.build_from_session(session_data)
-            graph_cache[session_id] = graph_data
-        else:
-            graph_data = graph_cache[session_id]
-
-        # Find central nodes
         analyzer = GraphAnalyzer(graph_data)
         central_nodes = analyzer.find_central_nodes(top_k=top_k)
 
         return {
             "success": True,
             "session_id": session_id,
-            "central_nodes": central_nodes
+            "central_nodes": central_nodes,
+            "source": "computed"
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Central node analysis failed: {str(e)}")
+
+
+@router.get("/stats/{session_id}")
+async def get_graph_stats(session_id: str):
+    """
+    Get graph statistics
+
+    Args:
+        session_id: Research session ID
+
+    Returns:
+        Graph statistics
+    """
+    db_service = get_db_service()
+
+    try:
+        db_session_id = db_service.get_session_id(session_id)
+        if db_session_id:
+            stats = db_service.graph.get_graph_stats(db_session_id)
+            return {
+                "success": True,
+                "session_id": session_id,
+                "stats": stats
+            }
+
+        raise HTTPException(status_code=404, detail="Graph not found for this session")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 
 @router.delete("/cache/{session_id}")
@@ -307,3 +379,52 @@ async def clear_graph_cache(session_id: str):
             "success": True,
             "message": "No cached graph found for this session"
         }
+
+
+async def _get_or_build_graph(session_id: str, db_service) -> Dict[str, Any]:
+    """Helper to get or build graph data"""
+
+    # Check cache first
+    if session_id in graph_cache:
+        return graph_cache[session_id]
+
+    # Check database for existing graph
+    db_graph = db_service.get_session_graph(session_id)
+    if db_graph:
+        graph_cache[session_id] = db_graph
+        return db_graph
+
+    # Try to build from file first
+    session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
+    session_data = None
+
+    if os.path.exists(session_file):
+        with open(session_file, 'r', encoding='utf-8') as f:
+            session_data = json.load(f)
+    else:
+        # Fallback: Build from database data
+        session = db_service.get_session_details(session_id)
+        if session:
+            analyses = db_service.get_session_analyses(session_id)
+            essay = db_service.get_session_essay(session_id)
+            session_data = {
+                'query': session['query'],
+                'analyses': analyses if analyses else [],
+                'essay': essay.get('full_content') if essay else None
+            }
+
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Research session not found")
+
+    builder = GraphBuilder()
+    graph_data = await builder.build_from_session(session_data)
+
+    # Save and cache (non-fatal DB save)
+    try:
+        db_service.save_graph(session_id, graph_data)
+    except Exception as e:
+        print(f"[Graph] Warning: Failed to save graph to DB: {e}")
+
+    graph_cache[session_id] = graph_data
+
+    return graph_data

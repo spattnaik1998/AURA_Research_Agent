@@ -43,15 +43,23 @@ class VectorStoreManager:
             True if successful, False otherwise
         """
         try:
-            # Load research results
+            research_data = None
+
+            # Try to load from JSON file first
             analysis_file = Path(ANALYSIS_DIR) / f"research_{session_id}.json"
 
-            if not analysis_file.exists():
-                print(f"[VectorStore] Session file not found: {analysis_file}")
-                return False
+            if analysis_file.exists():
+                print(f"[VectorStore] Loading from file: {analysis_file}")
+                with open(analysis_file, 'r', encoding='utf-8') as f:
+                    research_data = json.load(f)
+            else:
+                # Fallback to database
+                print(f"[VectorStore] File not found, trying database for session: {session_id}")
+                research_data = self._load_from_database(session_id)
 
-            with open(analysis_file, 'r', encoding='utf-8') as f:
-                research_data = json.load(f)
+            if not research_data:
+                print(f"[VectorStore] No data found for session: {session_id}")
+                return False
 
             # Extract documents from analyses
             documents = self._create_documents_from_analyses(
@@ -79,6 +87,59 @@ class VectorStoreManager:
         except Exception as e:
             print(f"[VectorStore] Initialization error: {str(e)}")
             return False
+
+    def _load_from_database(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Load research data from database
+
+        Args:
+            session_id: Research session ID (session_code)
+
+        Returns:
+            Research data dictionary or None
+        """
+        try:
+            from ..services.db_service import get_db_service
+            db_service = get_db_service()
+
+            # Get session details
+            session = db_service.get_session_details(session_id)
+            if not session:
+                print(f"[VectorStore] Session not found in database: {session_id}")
+                return None
+
+            # Get analyses from database
+            analyses = db_service.get_session_analyses(session_id)
+
+            # Get essay from database
+            essay_data = db_service.get_session_essay(session_id)
+            essay_content = essay_data.get('full_content', '') if essay_data else ''
+
+            # Format analyses to match expected structure
+            formatted_analyses = []
+            for a in analyses:
+                formatted_analyses.append({
+                    'summary': a.get('summary', ''),
+                    'key_points': a.get('key_points', []) if isinstance(a.get('key_points'), list) else [],
+                    'metadata': {
+                        'core_ideas': [],
+                        'key_findings': [],
+                        'methodology': a.get('methodology', ''),
+                        'relevance_score': a.get('relevance_score', 0)
+                    }
+                })
+
+            print(f"[VectorStore] Loaded {len(formatted_analyses)} analyses from database")
+
+            return {
+                'query': session.get('query', ''),
+                'analyses': formatted_analyses,
+                'essay': essay_content
+            }
+
+        except Exception as e:
+            print(f"[VectorStore] Database load error: {str(e)}")
+            return None
 
     def _create_documents_from_analyses(
         self,

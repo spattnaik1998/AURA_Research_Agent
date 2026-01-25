@@ -14,13 +14,13 @@
         /* CSS Variables for Theming */
         :root {
             /* Light Theme (Default) */
-            --bg-primary: #f9fafb;
+            --bg-primary: #FAFAFA;
             --bg-secondary: #ffffff;
-            --bg-tertiary: #f3f4f6;
+            --bg-tertiary: #F5F5F5;
             --text-primary: #111827;
-            --text-secondary: #6b7280;
+            --text-secondary: #6B7280;
             --text-tertiary: #9ca3af;
-            --border-color: #e5e7eb;
+            --border-color: #E5E7EB;
             --border-color-dark: #d1d5db;
 
             /* Card backgrounds */
@@ -34,164 +34,130 @@
             --error-bg: #fef2f2;
             --error-border: #fecaca;
             --error-text: #991b1b;
-            --info-bg: #eff6ff;
-            --info-border: #bfdbfe;
-            --info-text: #1e40af;
+            --info-bg: #DBEAFE;
+            --info-border: #93C5FD;
+            --info-text: #1E40AF;
 
-            /* Gradient colors (maintain brand colors) */
-            --gradient-from: #0ea5e9;
-            --gradient-to: #d946ef;
-            --gradient-accent: #38bdf8;
+            /* Accent color - Deep Blue */
+            --accent-primary: #1E40AF;
+            --accent-hover: #1E3A8A;
+            --accent-light: #DBEAFE;
+            --accent-medium: #3B82F6;
 
-            /* Header glass effect */
-            --header-bg: rgba(255, 255, 255, 0.8);
-            --header-border: rgba(229, 231, 235, 0.5);
+            /* Header */
+            --header-bg: rgba(255, 255, 255, 0.95);
+            --header-border: #E5E7EB;
 
             /* Shadow colors */
-            --shadow-sm: rgba(0, 0, 0, 0.05);
-            --shadow-md: rgba(0, 0, 0, 0.1);
-            --shadow-lg: rgba(0, 0, 0, 0.15);
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
         }
 
         /* Dark Theme */
         [data-theme="dark"] {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --bg-tertiary: #334155;
-            --text-primary: #ffffff;
-            --text-secondary: #e2e8f0;
-            --text-tertiary: #cbd5e1;
-            --border-color: #334155;
-            --border-color-dark: #475569;
+            --bg-primary: #111827;
+            --bg-secondary: #1F2937;
+            --bg-tertiary: #374151;
+            --text-primary: #F9FAFB;
+            --text-secondary: #E5E7EB;
+            --text-tertiary: #D1D5DB;
+            --border-color: #374151;
+            --border-color-dark: #4B5563;
 
             /* Card backgrounds */
-            --card-bg: #1e293b;
-            --card-hover: #334155;
+            --card-bg: #1F2937;
+            --card-hover: #374151;
 
             /* Status colors (darker variants) */
-            --success-bg: #022c22;
-            --success-border: #065f46;
-            --success-text: #ffffff;
-            --error-bg: #2d1515;
-            --error-border: #7f1d1d;
-            --error-text: #ffffff;
-            --info-bg: #1e3a5f;
-            --info-border: #1e40af;
-            --info-text: #ffffff;
+            --success-bg: #064E3B;
+            --success-border: #10B981;
+            --success-text: #ECFDF5;
+            --error-bg: #7F1D1D;
+            --error-border: #EF4444;
+            --error-text: #FEF2F2;
+            --info-bg: #1E3A5F;
+            --info-border: #3B82F6;
+            --info-text: #DBEAFE;
 
-            /* Gradient colors (slightly adjusted for dark mode) */
-            --gradient-from: #0ea5e9;
-            --gradient-to: #d946ef;
-            --gradient-accent: #38bdf8;
+            /* Accent color - Deep Blue (visible in dark mode) */
+            --accent-primary: #3B82F6;
+            --accent-hover: #2563EB;
+            --accent-light: #1E3A5F;
+            --accent-medium: #60A5FA;
 
-            /* Header glass effect */
-            --header-bg: rgba(15, 23, 42, 0.8);
-            --header-border: rgba(51, 65, 85, 0.5);
+            /* Header */
+            --header-bg: rgba(17, 24, 39, 0.95);
+            --header-border: #374151;
 
-            /* Shadow colors (lighter for dark mode) */
-            --shadow-sm: rgba(0, 0, 0, 0.3);
-            --shadow-md: rgba(0, 0, 0, 0.5);
-            --shadow-lg: rgba(0, 0, 0, 0.7);
+            /* Shadow colors */
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
         }
 
         body {
             font-family: 'Inter', sans-serif;
             background-color: var(--bg-primary);
             color: var(--text-primary);
-            transition: background-color 0.3s ease, color 0.3s ease;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
 
-        /* Intricate Thinking Animation */
+        /* Thinking Animation - Simplified */
         .thinking-indicator {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 2rem;
-            gap: 1.5rem;
+            padding: 1.5rem;
+            gap: 1rem;
         }
 
-        /* Orbital Ring System */
+        /* Simple spinner system */
         .orbital-system {
             position: relative;
-            width: 120px;
-            height: 120px;
+            width: 80px;
+            height: 80px;
         }
 
         .orbit {
             position: absolute;
             border: 2px solid;
             border-radius: 50%;
-            animation: rotate 3s linear infinite;
+            animation: rotate 2s linear infinite;
         }
 
         .orbit-1 {
-            width: 120px;
-            height: 120px;
-            border-color: rgba(14, 165, 233, 0.3); /* primary-500 */
-            animation-duration: 3s;
+            width: 80px;
+            height: 80px;
+            border-color: var(--accent-light);
+            border-top-color: var(--accent-primary);
         }
 
         .orbit-2 {
-            width: 90px;
-            height: 90px;
-            border-color: rgba(217, 70, 239, 0.3); /* accent-500 */
-            animation-duration: 2.5s;
+            width: 56px;
+            height: 56px;
+            border-color: var(--accent-light);
+            border-top-color: var(--accent-medium);
             animation-direction: reverse;
-            top: 15px;
-            left: 15px;
+            animation-duration: 1.5s;
+            top: 12px;
+            left: 12px;
         }
 
         .orbit-3 {
-            width: 60px;
-            height: 60px;
-            border-color: rgba(56, 189, 248, 0.3); /* primary-400 */
-            animation-duration: 2s;
-            top: 30px;
-            left: 30px;
-        }
-
-        /* Planets on orbits */
-        .planet {
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #0ea5e9, #d946ef); /* primary to accent */
-            box-shadow: 0 0 20px rgba(14, 165, 233, 0.6);
-        }
-
-        .planet-1 {
-            top: -6px;
-            left: 54px;
-            animation: glow 1.5s ease-in-out infinite;
-        }
-
-        .planet-2 {
-            top: 39px;
-            left: -6px;
-            background: linear-gradient(135deg, #d946ef, #38bdf8); /* accent to primary-400 */
-            animation: glow 1.5s ease-in-out infinite 0.5s;
-        }
-
-        .planet-3 {
+            width: 32px;
+            height: 32px;
+            border-color: var(--accent-light);
+            border-top-color: var(--accent-primary);
+            animation-duration: 1s;
             top: 24px;
             left: 24px;
-            background: linear-gradient(135deg, #38bdf8, #0ea5e9); /* primary-400 to primary-500 */
-            animation: glow 1.5s ease-in-out infinite 1s;
         }
 
-        /* Central core */
-        .core {
-            position: absolute;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #0ea5e9, #d946ef, #38bdf8);
-            top: 48px;
-            left: 48px;
-            animation: pulse-core 2s ease-in-out infinite;
-            box-shadow: 0 0 30px rgba(14, 165, 233, 0.8);
+        /* Hide planets - use simple spinner instead */
+        .planet, .core {
+            display: none;
         }
 
         /* Pulsing dots beneath */
@@ -202,95 +168,43 @@
         }
 
         .dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background: linear-gradient(135deg, #0ea5e9, #d946ef);
+            background: var(--accent-primary);
             animation: bounce-dot 1.4s ease-in-out infinite;
         }
 
         .dot:nth-child(2) {
             animation-delay: 0.2s;
-            background: linear-gradient(135deg, #d946ef, #38bdf8);
         }
 
         .dot:nth-child(3) {
             animation-delay: 0.4s;
-            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
         }
 
         /* Thinking text */
         .thinking-text {
             font-size: 0.875rem;
-            font-weight: 600;
-            background: linear-gradient(90deg, #0ea5e9, #d946ef, #38bdf8, #0ea5e9);
-            background-size: 200% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: gradient-shift 3s linear infinite;
+            font-weight: 500;
+            color: var(--text-secondary);
         }
 
         /* Keyframe Animations */
         @keyframes rotate {
-            from {
-                transform: rotate(0deg);
-            }
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        @keyframes glow {
-            0%, 100% {
-                box-shadow: 0 0 20px rgba(14, 165, 233, 0.6);
-                transform: scale(1);
-            }
-            50% {
-                box-shadow: 0 0 30px rgba(217, 70, 239, 0.9);
-                transform: scale(1.2);
-            }
-        }
-
-        @keyframes pulse-core {
-            0%, 100% {
-                transform: scale(1);
-                box-shadow: 0 0 30px rgba(14, 165, 233, 0.8);
-            }
-            50% {
-                transform: scale(1.3);
-                box-shadow: 0 0 50px rgba(217, 70, 239, 1);
-            }
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
 
         @keyframes bounce-dot {
-            0%, 100% {
-                transform: translateY(0);
-            }
-            50% {
-                transform: translateY(-12px);
-            }
-        }
-
-        @keyframes gradient-shift {
-            0% {
-                background-position: 0% center;
-            }
-            100% {
-                background-position: 200% center;
-            }
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
         }
 
         /* Fade in animation for thinking indicator */
         @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .thinking-indicator {
@@ -330,71 +244,69 @@
 
         /* Input Mode Toggle Buttons */
         .input-mode-btn {
-            color: #6b7280;
+            color: var(--text-secondary);
             background-color: transparent;
         }
 
         .input-mode-btn.active {
             color: #ffffff;
-            background: linear-gradient(135deg, #0ea5e9, #38bdf8);
-            box-shadow: 0 4px 6px -1px rgba(14, 165, 233, 0.3);
+            background: var(--accent-primary);
         }
 
         .input-mode-btn:hover:not(.active) {
-            color: #374151;
-            background-color: #e5e7eb;
+            color: var(--text-primary);
+            background-color: var(--bg-tertiary);
         }
 
         /* Themed Components */
         .themed-bg {
             background-color: var(--bg-secondary);
-            transition: background-color 0.3s ease;
         }
 
         .themed-card {
             background-color: var(--card-bg);
             border-color: var(--border-color);
-            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
         .themed-text {
             color: var(--text-primary);
-            transition: color 0.3s ease;
         }
 
         .themed-text-secondary {
             color: var(--text-secondary);
-            transition: color 0.3s ease;
         }
 
         .themed-border {
             border-color: var(--border-color);
-            transition: border-color 0.3s ease;
         }
 
         .glass-effect {
             background-color: var(--header-bg) !important;
             border-bottom: 1px solid var(--header-border);
-            transition: background-color 0.3s ease, border-color 0.3s ease;
         }
 
         /* Status Card Themed */
         .status-card {
             background-color: var(--card-bg);
-            border-color: var(--border-color);
-            transition: background-color 0.3s ease, border-color 0.3s ease;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .status-card:hover {
+            box-shadow: var(--shadow-md);
         }
 
         /* Input Field Themed */
         .input-field {
             background-color: var(--bg-secondary);
-            border-color: var(--border-color);
+            border: 1px solid var(--border-color);
             color: var(--text-primary);
-            transition: all 0.3s ease;
         }
 
         .input-field:focus {
-            border-color: var(--gradient-from);
+            border-color: var(--accent-primary);
+            outline: none;
+            box-shadow: 0 0 0 2px var(--accent-light);
         }
 
         .input-field::placeholder {
@@ -406,68 +318,70 @@
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            background: linear-gradient(135deg, var(--gradient-from), var(--gradient-accent));
+            background: var(--accent-primary);
             border: none;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 6px -1px var(--shadow-md);
+            transition: all 0.2s ease;
         }
 
         .theme-toggle:hover {
-            transform: scale(1.1) rotate(15deg);
-            box-shadow: 0 10px 15px -3px var(--shadow-lg);
+            background: var(--accent-hover);
+            transform: scale(1.05);
         }
 
         .theme-toggle svg {
             width: 20px;
             height: 20px;
             color: white;
-            transition: transform 0.3s ease;
         }
 
         /* Chat messages themed */
         .chat-message {
-            transition: background-color 0.3s ease;
+            border-radius: 0.75rem;
+            padding: 1rem;
         }
 
         .chat-message.user {
-            background-color: var(--bg-tertiary);
+            background-color: var(--accent-light);
+            border-left: 3px solid var(--accent-primary);
         }
 
         .chat-message.assistant {
             background-color: var(--card-bg);
-            border-color: var(--border-color);
+            border: 1px solid var(--border-color);
         }
 
         /* Update image upload area for dark mode */
         #image-upload-area {
             background-color: var(--bg-secondary);
             border-color: var(--border-color);
-            transition: all 0.3s ease;
         }
 
         #image-upload-area:hover {
-            border-color: var(--gradient-from);
-            background-color: var(--card-hover);
+            border-color: var(--accent-primary);
+            background-color: var(--accent-light);
         }
 
         /* Tab buttons themed */
         .tab-button {
             background-color: transparent;
             color: var(--text-secondary);
-            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
         }
 
         .tab-button.active {
-            color: var(--gradient-from);
-            border-bottom-color: var(--gradient-from);
+            color: var(--accent-primary);
+            border-bottom-color: var(--accent-primary);
+            background-color: var(--card-bg);
         }
 
         .tab-button:hover:not(.active) {
             color: var(--text-primary);
+            background-color: var(--bg-tertiary);
         }
 
         /* Additional themed elements */
@@ -562,19 +476,19 @@
 </head>
 <body class="min-h-screen antialiased">
     <!-- Header -->
-    <header class="glass-effect sticky top-0 z-50 backdrop-blur-xl">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <header class="glass-effect sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-4">
+                <div class="flex items-center space-x-3">
                     <!-- Logo Icon -->
-                    <div class="w-14 h-14 bg-gradient-to-br from-primary-500 to-accent-500 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/30 transform hover:scale-110 transition-transform duration-300">
-                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: var(--accent-primary);">
+                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
                         </svg>
                     </div>
                     <div>
-                        <h1 class="text-4xl font-extrabold gradient-text">AURA</h1>
-                        <p class="text-sm themed-text-secondary font-medium">Autonomous Unified Research Assistant</p>
+                        <h1 class="text-2xl font-bold" style="color: var(--accent-primary);">AURA</h1>
+                        <p class="text-xs themed-text-secondary font-medium">Autonomous Unified Research Assistant</p>
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -610,9 +524,9 @@
     <!-- Main Container -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
         <!-- Tab Navigation -->
-        <div class="bg-white rounded-3xl shadow-2xl mb-8 overflow-hidden border border-gray-100">
-            <div class="border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
-                <nav class="flex space-x-2 px-6">
+        <div class="rounded-2xl mb-8 overflow-hidden border" style="background-color: var(--card-bg); border-color: var(--border-color); box-shadow: var(--shadow-sm);">
+            <div class="border-b" style="border-color: var(--border-color); background-color: var(--bg-tertiary);">
+                <nav class="flex space-x-1 px-4">
                     <button onclick="switchTab('research')" id="tab-research" class="tab-button active">
                         <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>

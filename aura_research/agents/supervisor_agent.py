@@ -7,10 +7,51 @@ from typing import Dict, Any, List
 import asyncio
 from datetime import datetime
 import requests
+import logging
+import time
+from functools import wraps
 from .base_agent import BaseAgent, AgentStatus
 from .subordinate_agent import SubordinateAgent
 from ..utils.config import SERPER_API_KEY, MAX_SUBORDINATE_AGENTS, BATCH_SIZE
 import json
+import os
+
+# Setup logger
+logger = logging.getLogger('aura.agents')
+
+# Debug mode for mock data (set via environment)
+DEBUG_MODE = os.getenv("AURA_DEBUG_MODE", "false").lower() == "true"
+
+
+def retry_with_backoff(retries: int = 3, backoff_factor: float = 2.0):
+    """
+    Retry decorator with exponential backoff for async functions.
+
+    Args:
+        retries: Maximum number of retry attempts
+        backoff_factor: Multiplier for wait time between retries
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    if attempt < retries - 1:
+                        wait_time = backoff_factor ** attempt
+                        logger.warning(
+                            f"Attempt {attempt + 1}/{retries} failed: {e}. "
+                            f"Retrying in {wait_time}s..."
+                        )
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"All {retries} attempts failed: {e}")
+            raise last_exception
+        return wrapper
+    return decorator
 
 
 class SupervisorAgent(BaseAgent):
@@ -43,28 +84,28 @@ class SupervisorAgent(BaseAgent):
             raise ValueError("No research query provided")
 
         # Step 1: Fetch research papers
-        print(f"\n[Supervisor] Fetching papers for query: {query}")
+        logger.info(f"Fetching papers for query: {query}")
         self.papers = await self._fetch_papers(query)
-        print(f"[Supervisor] Found {len(self.papers)} papers")
+        logger.info(f"Found {len(self.papers)} papers")
 
         # Step 2: Categorize and distribute papers
-        print(f"[Supervisor] Categorizing papers...")
+        logger.info("Categorizing papers...")
         categorized_papers = await self._categorize_papers(self.papers)
 
         # Step 3: Create subordinate agents
-        print(f"[Supervisor] Creating subordinate agents...")
+        logger.info("Creating subordinate agents...")
         self._create_subordinate_agents()
 
         # Step 4: Distribute papers to subordinate agents
-        print(f"[Supervisor] Distributing papers to {len(self.subordinate_agents)} agents...")
+        logger.info(f"Distributing papers to {len(self.subordinate_agents)} agents...")
         paper_batches = self._distribute_papers(categorized_papers)
 
         # Step 5: Execute subordinate agents in parallel
-        print(f"[Supervisor] Starting parallel analysis...")
+        logger.info("Starting parallel analysis...")
         self.subordinate_results = await self._execute_subordinates(paper_batches)
 
         # Step 6: Track completion and collect results
-        print(f"[Supervisor] Analysis complete. Compiling results...")
+        logger.info("Analysis complete. Compiling results...")
         completion_status = self._get_completion_status()
 
         return {
@@ -78,9 +119,62 @@ class SupervisorAgent(BaseAgent):
             "timestamp": datetime.now().isoformat()
         }
 
+    @retry_with_backoff(retries=3, backoff_factor=2.0)
+    async def _fetch_papers_api(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Internal method to fetch papers from Serper API with retry support.
+
+        Args:
+            query: Search query
+
+        Returns:
+            List of paper metadata
+
+        Raises:
+            Exception: If API call fails after all retries
+        """
+        url = "https://google.serper.dev/scholar"
+
+        payload = {
+            "q": query,
+            "num": 20
+        }
+
+        headers = {
+            "X-API-KEY": SERPER_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        logger.info(f"Fetching papers from Serper API for query: {query}")
+
+        # Run sync request in thread pool to avoid blocking
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: requests.post(url, json=payload, headers=headers, timeout=30)
+        )
+
+        response.raise_for_status()
+
+        results = response.json()
+        papers = []
+
+        # Extract organic results
+        for result in results.get("organic", []):
+            papers.append({
+                "title": result.get("title", ""),
+                "snippet": result.get("snippet", ""),
+                "link": result.get("link", ""),
+                "publication_info": result.get("publicationInfo", {}),
+                "cited_by": {"total": result.get("citedBy", 0)}
+            })
+
+        logger.info(f"Successfully fetched {len(papers)} papers from Serper API")
+        return papers
+
     async def _fetch_papers(self, query: str) -> List[Dict[str, Any]]:
         """
-        Fetch research papers using Serper API
+        Fetch research papers using Serper API with fallback.
 
         Args:
             query: Search query
@@ -88,41 +182,22 @@ class SupervisorAgent(BaseAgent):
         Returns:
             List of paper metadata
         """
+        # Use mock data in debug mode
+        if DEBUG_MODE:
+            logger.info("DEBUG_MODE enabled - using mock papers")
+            return self._get_mock_papers(query)
+
         try:
-            # Using Serper API for Google Scholar search
-            url = "https://google.serper.dev/scholar"
-
-            payload = {
-                "q": query,
-                "num": 20
-            }
-
-            headers = {
-                "X-API-KEY": SERPER_API_KEY,
-                "Content-Type": "application/json"
-            }
-
-            response = requests.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-
-            results = response.json()
-            papers = []
-
-            # Extract organic results
-            for result in results.get("organic", []):
-                papers.append({
-                    "title": result.get("title", ""),
-                    "snippet": result.get("snippet", ""),
-                    "link": result.get("link", ""),
-                    "publication_info": result.get("publicationInfo", {}),
-                    "cited_by": {"total": result.get("citedBy", 0)}
-                })
-
-            return papers if papers else self._get_mock_papers(query)
+            papers = await self._fetch_papers_api(query)
+            if papers:
+                return papers
+            else:
+                logger.warning("Serper API returned no papers, using mock data")
+                return self._get_mock_papers(query)
 
         except Exception as e:
-            print(f"[Supervisor] Error fetching papers: {str(e)}")
-            # Return mock data for testing if API fails
+            logger.error(f"Serper API failed after retries: {str(e)}")
+            logger.warning("Falling back to mock data due to API failure")
             return self._get_mock_papers(query)
 
     def _get_mock_papers(self, query: str) -> List[Dict[str, Any]]:

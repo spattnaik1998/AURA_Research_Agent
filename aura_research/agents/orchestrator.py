@@ -24,12 +24,13 @@ class AgentOrchestrator:
         self.workflow = ResearchWorkflow(self.supervisor, self.summarizer)
         self.current_session_id = None
 
-    async def execute_research(self, query: str) -> Dict[str, Any]:
+    async def execute_research(self, query: str, session_id: str = None) -> Dict[str, Any]:
         """
         Execute complete research workflow
 
         Args:
             query: Research question
+            session_id: Optional session ID (if not provided, one will be generated)
 
         Returns:
             Complete research results
@@ -42,31 +43,33 @@ class AgentOrchestrator:
         # Execute workflow
         result = await self.workflow.run(query)
 
-        # Save results
-        session_id = self._save_results(result)
-        result["session_id"] = session_id
+        # Save results with provided or generated session_id
+        used_session_id = self._save_results(result, session_id)
+        result["session_id"] = used_session_id
 
         print(f"\n{'='*60}")
         print(f"Research Complete!")
-        print(f"Session ID: {session_id}")
+        print(f"Session ID: {used_session_id}")
         print(f"{'='*60}\n")
 
         return result
 
-    def _save_results(self, result: Dict[str, Any]) -> str:
+    def _save_results(self, result: Dict[str, Any], session_id: str = None) -> str:
         """
         Save research results to storage
 
         Args:
             result: Research results
+            session_id: Optional session ID to use
 
         Returns:
             Session ID
         """
         from datetime import datetime
 
-        # Generate session ID
-        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Use provided session_id or generate one
+        if not session_id:
+            session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Save to analysis directory
         output_file = Path(ANALYSIS_DIR) / f"research_{session_id}.json"

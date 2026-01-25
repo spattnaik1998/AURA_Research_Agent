@@ -5,11 +5,20 @@ Analyzes assigned research papers and extracts key information
 
 from typing import Dict, Any, List
 import asyncio
+import logging
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from openai import RateLimitError, APIError
 from .base_agent import BaseAgent, AgentStatus
 from ..utils.config import OPENAI_API_KEY, GPT_MODEL
 import json
+
+# Setup logger
+logger = logging.getLogger('aura.agents')
+
+# Rate limit retry configuration
+MAX_RETRIES = 3
+BASE_WAIT_TIME = 60  # seconds
 
 
 class SubordinateAgent(BaseAgent):
@@ -196,77 +205,117 @@ CRITICAL REMINDERS:
 - Quality and accuracy over everything else""")
         ])
 
-        try:
-            # Run LLM analysis
-            chain = prompt | self.llm
-            response = await chain.ainvoke({
-                "title": paper.get("title", "Unknown"),
-                "snippet": paper.get("snippet", "No description available"),
-                "link": paper.get("link", ""),
-                "pub_info": str(paper.get("publication_info", ""))
-            })
+        # Retry loop for rate limit handling
+        last_error = None
+        for attempt in range(MAX_RETRIES):
+            try:
+                logger.info(f"Analyzing paper: {paper.get('title', 'Unknown')[:50]}...")
 
-            # Parse JSON response
-            content = response.content
-
-            # Extract JSON from markdown code blocks if present
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-
-            analysis = json.loads(content)
-
-            # Ensure required structure
-            if "summary" not in analysis:
-                # Convert old format to new format if needed
-                analysis = {
-                    "summary": f"Analysis of {paper.get('title', 'Unknown')}",
-                    "key_points": analysis.get("core_ideas", []) + analysis.get("key_findings", []),
-                    "citations": [{
-                        "title": paper.get("title", "Unknown"),
-                        "authors": "Not specified",
-                        "year": "Not specified",
-                        "source": paper.get("link", "")
-                    }],
-                    "metadata": {
-                        "core_ideas": analysis.get("core_ideas", []),
-                        "methodology": analysis.get("methodology", ""),
-                        "key_findings": analysis.get("key_findings", []),
-                        "novelty": analysis.get("novelty", ""),
-                        "limitations": analysis.get("gaps", []),
-                        "relevance_score": analysis.get("relevance_score", 0),
-                        "reasoning": "ReAct framework applied"
-                    }
-                }
-
-            return analysis
-
-        except Exception as e:
-            # Fallback structure with new format
-            return {
-                "summary": f"Unable to fully analyze: {paper.get('title', 'Unknown')}. Error: {str(e)}",
-                "key_points": [
-                    "Analysis encountered an error",
-                    "Paper information partially available"
-                ],
-                "citations": [{
+                # Run LLM analysis
+                chain = prompt | self.llm
+                response = await chain.ainvoke({
                     "title": paper.get("title", "Unknown"),
-                    "authors": "Not specified",
-                    "year": "Not specified",
-                    "source": paper.get("link", "")
-                }],
-                "metadata": {
-                    "core_ideas": [],
-                    "methodology": "Could not extract",
-                    "key_findings": [],
-                    "novelty": "Could not assess",
-                    "limitations": ["Analysis failed"],
-                    "relevance_score": 0,
-                    "reasoning": f"Error occurred: {str(e)}",
-                    "error": str(e)
-                }
+                    "snippet": paper.get("snippet", "No description available"),
+                    "link": paper.get("link", ""),
+                    "pub_info": str(paper.get("publication_info", ""))
+                })
+
+                # Parse JSON response
+                content = response.content
+
+                # Extract JSON from markdown code blocks if present
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0].strip()
+                elif "```" in content:
+                    content = content.split("```")[1].split("```")[0].strip()
+
+                analysis = json.loads(content)
+
+                # Ensure required structure
+                if "summary" not in analysis:
+                    # Convert old format to new format if needed
+                    analysis = {
+                        "summary": f"Analysis of {paper.get('title', 'Unknown')}",
+                        "key_points": analysis.get("core_ideas", []) + analysis.get("key_findings", []),
+                        "citations": [{
+                            "title": paper.get("title", "Unknown"),
+                            "authors": "Not specified",
+                            "year": "Not specified",
+                            "source": paper.get("link", "")
+                        }],
+                        "metadata": {
+                            "core_ideas": analysis.get("core_ideas", []),
+                            "methodology": analysis.get("methodology", ""),
+                            "key_findings": analysis.get("key_findings", []),
+                            "novelty": analysis.get("novelty", ""),
+                            "limitations": analysis.get("gaps", []),
+                            "relevance_score": analysis.get("relevance_score", 0),
+                            "reasoning": "ReAct framework applied"
+                        }
+                    }
+
+                logger.info(f"Successfully analyzed paper: {paper.get('title', 'Unknown')[:50]}")
+                return analysis
+
+            except RateLimitError as e:
+                last_error = e
+                wait_time = BASE_WAIT_TIME * (attempt + 1)
+                logger.warning(
+                    f"OpenAI rate limit hit (attempt {attempt + 1}/{MAX_RETRIES}). "
+                    f"Waiting {wait_time}s before retry..."
+                )
+                await asyncio.sleep(wait_time)
+
+            except APIError as e:
+                last_error = e
+                logger.error(f"OpenAI API error: {e}")
+                if attempt < MAX_RETRIES - 1:
+                    wait_time = 10 * (attempt + 1)
+                    logger.info(f"Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    break
+
+            except json.JSONDecodeError as e:
+                last_error = e
+                logger.warning(f"JSON parsing error: {e}. Retrying...")
+                if attempt < MAX_RETRIES - 1:
+                    await asyncio.sleep(2)
+                else:
+                    break
+
+            except Exception as e:
+                last_error = e
+                logger.error(f"Unexpected error analyzing paper: {e}")
+                break
+
+        # Fallback structure after all retries failed
+        error_msg = str(last_error) if last_error else "Unknown error"
+        logger.error(f"Failed to analyze paper after {MAX_RETRIES} attempts: {error_msg}")
+
+        return {
+            "summary": f"Unable to fully analyze: {paper.get('title', 'Unknown')}. Error: {error_msg}",
+            "key_points": [
+                "Analysis encountered an error",
+                "Paper information partially available"
+            ],
+            "citations": [{
+                "title": paper.get("title", "Unknown"),
+                "authors": "Not specified",
+                "year": "Not specified",
+                "source": paper.get("link", "")
+            }],
+            "metadata": {
+                "core_ideas": [],
+                "methodology": "Could not extract",
+                "key_findings": [],
+                "novelty": "Could not assess",
+                "limitations": ["Analysis failed"],
+                "relevance_score": 0,
+                "reasoning": f"Error occurred: {error_msg}",
+                "error": error_msg
             }
+        }
 
     async def _create_summary(self, analyses: List[Dict[str, Any]]) -> str:
         """
@@ -304,13 +353,26 @@ Focus on SUBSTANCE - what did you actually learn from these papers?
 Use precise language and specific examples from the analyses.""")
         ])
 
-        try:
-            chain = summary_prompt | self.llm
-            response = await chain.ainvoke({
-                "analyses": json.dumps(analyses, indent=2)
-            })
+        for attempt in range(MAX_RETRIES):
+            try:
+                chain = summary_prompt | self.llm
+                response = await chain.ainvoke({
+                    "analyses": json.dumps(analyses, indent=2)
+                })
 
-            return response.content.strip()
+                logger.info(f"Successfully created summary for {len(analyses)} analyses")
+                return response.content.strip()
 
-        except Exception as e:
-            return f"Summary generation failed: {str(e)}"
+            except RateLimitError as e:
+                wait_time = BASE_WAIT_TIME * (attempt + 1)
+                logger.warning(
+                    f"Rate limit hit during summary (attempt {attempt + 1}/{MAX_RETRIES}). "
+                    f"Waiting {wait_time}s..."
+                )
+                await asyncio.sleep(wait_time)
+
+            except Exception as e:
+                logger.error(f"Summary generation failed: {e}")
+                return f"Summary generation failed: {str(e)}"
+
+        return "Summary generation failed after maximum retries"

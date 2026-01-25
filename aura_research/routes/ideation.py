@@ -1,6 +1,7 @@
 """
 Ideation API Routes
 Research question generation and proposal building
+Integrated with SQL Server database
 """
 
 from fastapi import APIRouter, HTTPException
@@ -10,10 +11,11 @@ import json
 import os
 from ..ideation.question_generator import QuestionGenerator
 from ..utils.config import ANALYSIS_DIR
+from ..services.db_service import get_db_service
 
 router = APIRouter(prefix="/ideation", tags=["ideation"])
 
-# In-memory cache for generated questions
+# In-memory cache for generated questions (for fast access)
 questions_cache = {}
 
 
@@ -27,7 +29,8 @@ class RefineQuestionRequest(BaseModel):
 async def generate_questions(
     session_id: str,
     num_questions: int = 15,
-    include_gaps: bool = True
+    include_gaps: bool = True,
+    user_id: Optional[int] = None
 ):
     """
     Generate research questions from a completed research session
@@ -36,19 +39,37 @@ async def generate_questions(
         session_id: Research session ID
         num_questions: Number of questions to generate (default 15)
         include_gaps: Whether to identify gaps first (default True)
+        user_id: Optional user ID for audit
 
     Returns:
         Generated questions with gaps and scores
     """
+    db_service = get_db_service()
+
     try:
-        # Load session data
-        session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
+        # Try to load session data from database first
+        session = db_service.get_session_details(session_id)
 
-        if not os.path.exists(session_file):
-            raise HTTPException(status_code=404, detail="Research session not found")
+        if session:
+            # Get analyses and essay from database
+            analyses = db_service.get_session_analyses(session_id)
+            essay = db_service.get_session_essay(session_id)
 
-        with open(session_file, 'r', encoding='utf-8') as f:
-            session_data = json.load(f)
+            session_data = {
+                'query': session['query'],
+                'analyses': analyses,
+                'essay': essay.get('full_content') if essay else None,
+                'subordinate_results': [{'result': {'analyses': analyses}}]
+            }
+        else:
+            # Fallback to file-based data
+            session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
+
+            if not os.path.exists(session_file):
+                raise HTTPException(status_code=404, detail="Research session not found")
+
+            with open(session_file, 'r', encoding='utf-8') as f:
+                session_data = json.load(f)
 
         # Generate questions
         generator = QuestionGenerator()
@@ -58,13 +79,20 @@ async def generate_questions(
             include_gaps=include_gaps
         )
 
+        # Save to database
+        db_service.save_ideation_results(session_id, result, user_id)
+
         # Cache the results
         questions_cache[session_id] = result
 
         return {
             "success": True,
             "session_id": session_id,
-            "data": result
+            "data": result,
+            "stats": {
+                "questions_generated": len(result.get('questions', [])),
+                "gaps_identified": len(result.get('gaps_identified', []))
+            }
         }
 
     except FileNotFoundError:
@@ -87,18 +115,38 @@ async def get_questions(session_id: str):
     Returns:
         Previously generated questions
     """
+    db_service = get_db_service()
+
+    # Check cache first
     if session_id in questions_cache:
         return {
             "success": True,
             "session_id": session_id,
             "data": questions_cache[session_id],
-            "cached": True
+            "source": "cache"
         }
-    else:
-        raise HTTPException(
-            status_code=404,
-            detail="No questions found for this session. Generate questions first."
-        )
+
+    # Check database
+    questions = db_service.get_session_questions(session_id)
+    gaps = db_service.get_session_gaps(session_id)
+
+    if questions or gaps:
+        result = {
+            'questions': questions,
+            'gaps_identified': gaps
+        }
+        questions_cache[session_id] = result
+        return {
+            "success": True,
+            "session_id": session_id,
+            "data": result,
+            "source": "database"
+        }
+
+    raise HTTPException(
+        status_code=404,
+        detail="No questions found for this session. Generate questions first."
+    )
 
 
 @router.get("/gaps/{session_id}")
@@ -112,19 +160,34 @@ async def get_gaps(session_id: str):
     Returns:
         Research gaps identified
     """
+    db_service = get_db_service()
+
+    # Check cache first
     if session_id in questions_cache:
         data = questions_cache[session_id]
         return {
             "success": True,
             "session_id": session_id,
             "gaps": data.get("gaps_identified", []),
-            "total_gaps": len(data.get("gaps_identified", []))
+            "total_gaps": len(data.get("gaps_identified", [])),
+            "source": "cache"
         }
-    else:
-        raise HTTPException(
-            status_code=404,
-            detail="No gaps found. Generate questions first to identify gaps."
-        )
+
+    # Check database
+    gaps = db_service.get_session_gaps(session_id)
+    if gaps:
+        return {
+            "success": True,
+            "session_id": session_id,
+            "gaps": gaps,
+            "total_gaps": len(gaps),
+            "source": "database"
+        }
+
+    raise HTTPException(
+        status_code=404,
+        detail="No gaps found. Generate questions first to identify gaps."
+    )
 
 
 @router.post("/refine-question/{session_id}")
@@ -142,15 +205,28 @@ async def refine_question(
     Returns:
         Refined question variations
     """
+    db_service = get_db_service()
+
     try:
-        # Get research context from cache
-        if session_id not in questions_cache:
+        # Get research context
+        research_context = {}
+
+        if session_id in questions_cache:
+            research_context = questions_cache[session_id].get("research_summary", {})
+        else:
+            # Try to get from database
+            session = db_service.get_session_details(session_id)
+            if session:
+                research_context = {
+                    'query': session['query'],
+                    'analyses_count': session.get('analysis_count', 0)
+                }
+
+        if not research_context:
             raise HTTPException(
                 status_code=404,
-                detail="Session not found in cache. Generate questions first."
+                detail="Session not found. Generate questions first."
             )
-
-        research_context = questions_cache[session_id].get("research_summary", {})
 
         # Refine question
         generator = QuestionGenerator()
@@ -184,6 +260,23 @@ async def get_questions_by_type(session_id: str):
     Returns:
         Questions grouped by type
     """
+    db_service = get_db_service()
+
+    # Try database first
+    grouped = db_service.ideation.get_questions_grouped_by_type(
+        db_service.get_session_id(session_id) or 0
+    )
+
+    if grouped:
+        return {
+            "success": True,
+            "session_id": session_id,
+            "grouped_questions": grouped,
+            "types": list(grouped.keys()),
+            "source": "database"
+        }
+
+    # Fallback to cache
     if session_id not in questions_cache:
         raise HTTPException(
             status_code=404,
@@ -205,7 +298,8 @@ async def get_questions_by_type(session_id: str):
         "success": True,
         "session_id": session_id,
         "grouped_questions": grouped,
-        "types": list(grouped.keys())
+        "types": list(grouped.keys()),
+        "source": "cache"
     }
 
 
@@ -221,6 +315,22 @@ async def get_top_questions(session_id: str, limit: int = 5):
     Returns:
         Top-ranked questions
     """
+    db_service = get_db_service()
+
+    # Try database first
+    db_session_id = db_service.get_session_id(session_id)
+    if db_session_id:
+        top_questions = db_service.ideation.get_top_questions(db_session_id, limit)
+        if top_questions:
+            return {
+                "success": True,
+                "session_id": session_id,
+                "top_questions": top_questions,
+                "limit": limit,
+                "source": "database"
+            }
+
+    # Fallback to cache
     if session_id not in questions_cache:
         raise HTTPException(
             status_code=404,
@@ -237,7 +347,8 @@ async def get_top_questions(session_id: str, limit: int = 5):
         "success": True,
         "session_id": session_id,
         "top_questions": top_questions,
-        "limit": limit
+        "limit": limit,
+        "source": "cache"
     }
 
 
@@ -276,6 +387,38 @@ async def get_question_stats(session_id: str):
     Returns:
         Statistics about questions
     """
+    db_service = get_db_service()
+
+    # Try database first
+    db_session_id = db_service.get_session_id(session_id)
+    if db_session_id:
+        stats = db_service.ideation.get_question_stats(db_session_id)
+        if stats and stats.get('total_questions', 0) > 0:
+            # Get top question
+            top_questions = db_service.ideation.get_top_questions(db_session_id, 1)
+            gaps = db_service.get_session_gaps(session_id)
+
+            return {
+                "success": True,
+                "session_id": session_id,
+                "statistics": {
+                    "total_questions": stats['total_questions'],
+                    "total_gaps": len(gaps),
+                    "question_types": stats['question_types'],
+                    "average_overall_score": float(stats['avg_overall_score']) if stats.get('avg_overall_score') else 0,
+                    "average_scores": {
+                        "novelty": float(stats['avg_novelty']) if stats.get('avg_novelty') else 0,
+                        "feasibility": float(stats['avg_feasibility']) if stats.get('avg_feasibility') else 0,
+                        "impact": float(stats['avg_impact']) if stats.get('avg_impact') else 0
+                    },
+                    "highest_scored": top_questions[0] if top_questions else None,
+                    "max_score": float(stats['max_score']) if stats.get('max_score') else 0,
+                    "min_score": float(stats['min_score']) if stats.get('min_score') else 0
+                },
+                "source": "database"
+            }
+
+    # Fallback to cache
     if session_id not in questions_cache:
         raise HTTPException(
             status_code=404,
@@ -332,5 +475,6 @@ async def get_question_stats(session_id: str):
                 questions,
                 key=lambda q: q.get("scores", {}).get("feasibility", 0)
             ) if questions else None
-        }
+        },
+        "source": "cache"
     }
