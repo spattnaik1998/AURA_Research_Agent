@@ -214,16 +214,21 @@ async def list_sessions(user_id: Optional[int] = None, include_all: bool = False
     try:
         db_service = get_db_service()
 
+        print(f"[Chat Sessions] Request - user_id: {user_id}, include_all: {include_all}")
+
         # Get completed sessions from database
         # If user_id is provided, filter by user; otherwise show all (backwards compatible)
         if user_id is not None:
             db_sessions = db_service.get_completed_sessions(limit=50, user_id=user_id)
+            print(f"[Chat Sessions] Filtering by user_id={user_id}, found {len(db_sessions)} sessions")
         elif include_all:
             db_sessions = db_service.get_completed_sessions(limit=50, user_id=None)
+            print(f"[Chat Sessions] Showing all sessions (include_all=True), found {len(db_sessions)} sessions")
         else:
             # Default: return empty if no user specified (secure by default)
             # For backwards compatibility during transition, still show all
             db_sessions = db_service.get_completed_sessions(limit=50, user_id=None)
+            print(f"[Chat Sessions] No user_id, showing all sessions, found {len(db_sessions)} sessions")
 
         sessions = []
         for session in db_sessions:

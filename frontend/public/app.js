@@ -515,14 +515,6 @@ function updateProgressStep(stepId, status) {
 }
 
 /**
- * Get current user ID from stored user data
- */
-function getCurrentUserId() {
-    const user = currentUser || JSON.parse(localStorage.getItem('aura_user') || 'null');
-    return user ? user.user_id : null;
-}
-
-/**
  * Load available research sessions
  */
 async function loadAvailableSessions() {
@@ -531,12 +523,16 @@ async function loadAvailableSessions() {
     try {
         // Get sessions filtered by current user
         const userId = getCurrentUserId();
+        console.log('[Sessions] Loading sessions for user_id:', userId);
+
         const url = userId
             ? `${API_BASE_URL}/chat/sessions?user_id=${userId}`
             : `${API_BASE_URL}/chat/sessions`;
 
+        console.log('[Sessions] Fetching from:', url);
         const response = await fetch(url);
         const data = await response.json();
+        console.log('[Sessions] Received:', data.count, 'sessions');
 
         if (data.sessions && data.sessions.length > 0) {
             selector.innerHTML = '<option value="">Select a research session...</option>';
