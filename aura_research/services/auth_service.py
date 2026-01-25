@@ -367,12 +367,25 @@ class AuthService:
                 role="user"
             )
 
-            # Log registration
-            self.audit.log_user_registered(
-                user_id=user_id,
-                username=username,
-                ip_address=ip_address
-            )
+            # Validate user was created successfully
+            if not user_id or user_id <= 0:
+                # Try to retrieve the user we just created
+                created_user = self.users.get_by_username(username)
+                if created_user:
+                    user_id = created_user['user_id']
+                else:
+                    return {"success": False, "error": "Failed to create user account"}
+
+            # Log registration (non-fatal if it fails)
+            try:
+                self.audit.log_user_registered(
+                    user_id=user_id,
+                    username=username,
+                    ip_address=ip_address
+                )
+            except Exception as audit_error:
+                print(f"[AuthService] Warning: Audit log failed: {audit_error}")
+                # Continue without audit log - registration still succeeded
 
             # Create tokens
             access_token = self.create_access_token(

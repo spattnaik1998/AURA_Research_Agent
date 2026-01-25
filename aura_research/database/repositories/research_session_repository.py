@@ -128,15 +128,44 @@ class ResearchSessionRepository(BaseRepository):
         """
         return self.db.fetch_all(query, (limit,))
 
-    def get_completed_sessions(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get completed research sessions."""
-        query = """
-            SELECT * FROM ResearchSessions
-            WHERE status = 'completed'
-            ORDER BY completed_at DESC
-            OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY
+    def get_completed_sessions(
+        self,
+        limit: int = 20,
+        user_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
         """
-        return self.db.fetch_all(query, (limit,))
+        Get completed research sessions.
+
+        Args:
+            limit: Maximum number of sessions to return
+            user_id: If provided, only return sessions for this user.
+                     If None, returns all completed sessions (for backwards compatibility).
+
+        Returns:
+            List of completed sessions
+        """
+        if user_id is not None:
+            query = """
+                SELECT rs.*,
+                    CASE WHEN EXISTS (SELECT 1 FROM Essays WHERE session_id = rs.session_id)
+                         THEN 1 ELSE 0 END as has_essay
+                FROM ResearchSessions rs
+                WHERE rs.status = 'completed' AND rs.user_id = ?
+                ORDER BY rs.completed_at DESC
+                OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY
+            """
+            return self.db.fetch_all(query, (user_id, limit))
+        else:
+            query = """
+                SELECT rs.*,
+                    CASE WHEN EXISTS (SELECT 1 FROM Essays WHERE session_id = rs.session_id)
+                         THEN 1 ELSE 0 END as has_essay
+                FROM ResearchSessions rs
+                WHERE rs.status = 'completed'
+                ORDER BY rs.completed_at DESC
+                OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY
+            """
+            return self.db.fetch_all(query, (limit,))
 
     def get_session_with_details(self, session_id: int) -> Optional[Dict[str, Any]]:
         """Get session with paper count and essay status."""

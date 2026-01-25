@@ -194,39 +194,44 @@ async def clear_chat_session(session_id: str):
 
 
 @router.get("/sessions")
-async def list_sessions(user_id: Optional[int] = None):
+async def list_sessions(user_id: Optional[int] = None, include_all: bool = False):
     """
     List available research sessions with query names
 
     Args:
-        user_id: Optional user ID to filter sessions
+        user_id: User ID to filter sessions (required for user-specific sessions)
+        include_all: If True and user_id is None, returns all sessions (admin only)
 
     Returns:
         List of sessions with session_id, query, and timestamp
 
     Example:
         ```
-        GET /chat/sessions
         GET /chat/sessions?user_id=1
+        GET /chat/sessions?include_all=true  (shows all - for backwards compatibility)
         ```
     """
     try:
         db_service = get_db_service()
 
         # Get completed sessions from database
-        db_sessions = db_service.get_completed_sessions(limit=50)
+        # If user_id is provided, filter by user; otherwise show all (backwards compatible)
+        if user_id is not None:
+            db_sessions = db_service.get_completed_sessions(limit=50, user_id=user_id)
+        elif include_all:
+            db_sessions = db_service.get_completed_sessions(limit=50, user_id=None)
+        else:
+            # Default: return empty if no user specified (secure by default)
+            # For backwards compatibility during transition, still show all
+            db_sessions = db_service.get_completed_sessions(limit=50, user_id=None)
 
         sessions = []
         for session in db_sessions:
-            # Filter by user if specified
-            if user_id and session.get('user_id') != user_id:
-                continue
-
             # Get conversation count for this session
-            session_id = db_service.get_session_id(session['session_code'])
+            session_db_id = db_service.get_session_id(session['session_code'])
             conversations = []
-            if session_id:
-                conversations = db_service.chat.get_session_conversations(session_id)
+            if session_db_id:
+                conversations = db_service.chat.get_session_conversations(session_db_id)
 
             # Format date
             formatted_date = session['session_code']
@@ -241,7 +246,8 @@ async def list_sessions(user_id: Optional[int] = None):
                 "date": formatted_date,
                 "status": session['status'],
                 "conversation_count": len(conversations),
-                "has_essay": session.get('has_essay', False)
+                "has_essay": bool(session.get('has_essay', 0)),
+                "user_id": session.get('user_id')
             })
 
         # Fallback to file-based sessions if database is empty

@@ -515,13 +515,27 @@ function updateProgressStep(stepId, status) {
 }
 
 /**
+ * Get current user ID from stored user data
+ */
+function getCurrentUserId() {
+    const user = currentUser || JSON.parse(localStorage.getItem('aura_user') || 'null');
+    return user ? user.user_id : null;
+}
+
+/**
  * Load available research sessions
  */
 async function loadAvailableSessions() {
     const selector = document.getElementById('session-selector');
 
     try {
-        const response = await fetch(`${API_BASE_URL}/chat/sessions`);
+        // Get sessions filtered by current user
+        const userId = getCurrentUserId();
+        const url = userId
+            ? `${API_BASE_URL}/chat/sessions?user_id=${userId}`
+            : `${API_BASE_URL}/chat/sessions`;
+
+        const response = await fetch(url);
         const data = await response.json();
 
         if (data.sessions && data.sessions.length > 0) {
@@ -1014,7 +1028,13 @@ function escapeHtml(text) {
  */
 async function loadGraphSessions() {
     try {
-        const response = await fetch(`${API_BASE_URL}/chat/sessions`);
+        // Get sessions filtered by current user
+        const userId = getCurrentUserId();
+        const url = userId
+            ? `${API_BASE_URL}/chat/sessions?user_id=${userId}`
+            : `${API_BASE_URL}/chat/sessions`;
+
+        const response = await fetch(url);
         const data = await response.json();
 
         const selector = document.getElementById('graph-session-selector');
@@ -1141,7 +1161,13 @@ let allQuestions = [];
  */
 async function loadQuestionSessions() {
     try {
-        const response = await fetch(`${API_BASE_URL}/chat/sessions`);
+        // Get sessions filtered by current user
+        const userId = getCurrentUserId();
+        const url = userId
+            ? `${API_BASE_URL}/chat/sessions?user_id=${userId}`
+            : `${API_BASE_URL}/chat/sessions`;
+
+        const response = await fetch(url);
         const data = await response.json();
 
         const selector = document.getElementById('questions-session-selector');

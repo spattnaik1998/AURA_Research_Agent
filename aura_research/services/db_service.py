@@ -222,9 +222,22 @@ class DatabaseService:
             return self.sessions.get_user_sessions(user_id, limit)
         return self.sessions.get_recent_sessions(limit)
 
-    def get_completed_sessions(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get completed sessions for chat/ideation."""
-        return self.sessions.get_completed_sessions(limit)
+    def get_completed_sessions(
+        self,
+        limit: int = 20,
+        user_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get completed sessions for chat/ideation.
+
+        Args:
+            limit: Maximum number of sessions to return
+            user_id: If provided, only return sessions for this user
+
+        Returns:
+            List of completed sessions
+        """
+        return self.sessions.get_completed_sessions(limit=limit, user_id=user_id)
 
     # ==================== Paper Methods ====================
 
