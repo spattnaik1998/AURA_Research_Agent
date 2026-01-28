@@ -530,7 +530,11 @@ async function loadAvailableSessions() {
             : `${API_BASE_URL}/chat/sessions`;
 
         console.log('[Sessions] Fetching from:', url);
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            headers: {
+                ...getAuthHeaders()
+            }
+        });
         const data = await response.json();
         console.log('[Sessions] Received:', data.count, 'sessions');
 
@@ -812,7 +816,11 @@ async function updateResearchStatus() {
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}/research/status/${currentSessionId}`);
+        const response = await fetch(`${API_BASE_URL}/research/status/${currentSessionId}`, {
+            headers: {
+                ...getAuthHeaders()
+            }
+        });
 
         if (!response.ok) {
             throw new Error('Failed to get status');
@@ -1030,7 +1038,11 @@ async function loadGraphSessions() {
             ? `${API_BASE_URL}/chat/sessions?user_id=${userId}`
             : `${API_BASE_URL}/chat/sessions`;
 
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            headers: {
+                ...getAuthHeaders()
+            }
+        });
         const data = await response.json();
 
         const selector = document.getElementById('graph-session-selector');
@@ -1104,21 +1116,36 @@ async function refreshGraph() {
 
         // Clear cache and rebuild
         await fetch(`${API_BASE_URL}/graph/cache/${sessionId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: {
+                ...getAuthHeaders()
+            }
         });
 
         // Rebuild graph
         const response = await fetch(`${API_BASE_URL}/graph/build/${sessionId}`, {
-            method: 'POST'
+            method: 'POST',
+            headers: {
+                ...getAuthHeaders()
+            }
         });
 
         if (!response.ok) {
             throw new Error('Failed to rebuild graph');
         }
 
-        // Reload the visualization
+        const buildData = await response.json();
+
+        // Use graph data directly from build response
         const viz = initGraphVisualizer();
-        await viz.loadGraph(sessionId);
+        if (buildData.success && buildData.graph) {
+            viz.graphData = buildData.graph;
+            viz.currentSessionId = sessionId;
+            viz.render();
+            await viz.loadAnalysis(sessionId);
+        } else {
+            throw new Error('Build returned no graph data');
+        }
 
         showNotification('Knowledge graph rebuilt successfully!', 'success');
     } catch (error) {
@@ -1163,7 +1190,11 @@ async function loadQuestionSessions() {
             ? `${API_BASE_URL}/chat/sessions?user_id=${userId}`
             : `${API_BASE_URL}/chat/sessions`;
 
-        const response = await fetch(url);
+        const response = await fetch(url, {
+            headers: {
+                ...getAuthHeaders()
+            }
+        });
         const data = await response.json();
 
         const selector = document.getElementById('questions-session-selector');
@@ -1222,7 +1253,12 @@ async function generateQuestions() {
         // Call API
         const response = await fetch(
             `${API_BASE_URL}/ideation/generate-questions/${sessionId}?num_questions=${numQuestions}&include_gaps=${includeGaps}`,
-            { method: 'POST' }
+            {
+                method: 'POST',
+                headers: {
+                    ...getAuthHeaders()
+                }
+            }
         );
 
         if (!response.ok) {
@@ -1423,7 +1459,11 @@ function sortQuestions() {
  */
 async function displayQuestionStats(sessionId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/ideation/stats/${sessionId}`);
+        const response = await fetch(`${API_BASE_URL}/ideation/stats/${sessionId}`, {
+            headers: {
+                ...getAuthHeaders()
+            }
+        });
         const data = await response.json();
 
         const stats = data.statistics;

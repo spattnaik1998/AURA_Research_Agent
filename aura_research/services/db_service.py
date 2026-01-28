@@ -707,6 +707,37 @@ class DatabaseService:
         """Get user by username."""
         return self.users.get_by_username(username)
 
+    # ==================== Session Ownership Methods ====================
+
+    def get_session_owner(self, session_code: str) -> Optional[int]:
+        """
+        Get the owner (user_id) of a session.
+
+        Args:
+            session_code: The session code
+
+        Returns:
+            user_id if session exists, None otherwise
+        """
+        return self.sessions.get_session_owner(session_code)
+
+    def verify_session_ownership(
+        self,
+        session_code: str,
+        user_id: int
+    ) -> bool:
+        """
+        Verify that a user owns a specific session.
+
+        Args:
+            session_code: The session code to check
+            user_id: The user ID to verify ownership for
+
+        Returns:
+            True if the user owns the session, False otherwise
+        """
+        return self.sessions.verify_session_ownership(session_code, user_id)
+
 
 # Global database service instance
 _db_service: Optional[DatabaseService] = None

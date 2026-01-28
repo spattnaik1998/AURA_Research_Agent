@@ -199,3 +199,39 @@ class ResearchSessionRepository(BaseRepository):
         query = "DELETE FROM ResearchSessions WHERE session_id = ?"
         rows_affected = self.db.execute(query, (session_id,))
         return rows_affected > 0
+
+    def get_session_owner(self, session_code: str) -> Optional[int]:
+        """
+        Get the owner (user_id) of a session.
+
+        Args:
+            session_code: The session code
+
+        Returns:
+            user_id if session exists, None otherwise
+        """
+        query = "SELECT user_id FROM ResearchSessions WHERE session_code = ?"
+        result = self.db.fetch_one(query, (session_code,))
+        return result['user_id'] if result else None
+
+    def verify_session_ownership(
+        self,
+        session_code: str,
+        user_id: int
+    ) -> bool:
+        """
+        Verify that a user owns a specific session.
+
+        Args:
+            session_code: The session code to check
+            user_id: The user ID to verify ownership for
+
+        Returns:
+            True if the user owns the session, False otherwise
+        """
+        query = """
+            SELECT 1 FROM ResearchSessions
+            WHERE session_code = ? AND user_id = ?
+        """
+        result = self.db.fetch_one(query, (session_code, user_id))
+        return result is not None

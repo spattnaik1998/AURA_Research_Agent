@@ -3,7 +3,8 @@ Knowledge Graph API Routes
 Integrated with SQL Server database
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 import json
@@ -12,8 +13,42 @@ from ..graph.graph_builder import GraphBuilder
 from ..graph.graph_analyzer import GraphAnalyzer
 from ..utils.config import ANALYSIS_DIR
 from ..services.db_service import get_db_service
+from ..services.auth_service import get_auth_service
+
+security = HTTPBearer(auto_error=False)
 
 router = APIRouter(prefix="/graph", tags=["graph"])
+
+
+# ==================== Authentication Helpers ====================
+
+async def require_auth(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Dict[str, Any]:
+    """Require valid authentication. Raises 401 if not authenticated."""
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    auth_service = get_auth_service()
+    user = auth_service.get_current_user(credentials.credentials)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    return user
+
+
+def verify_session_access(session_id: str, user_id: int, db_service) -> bool:
+    """Verify that a user has access to a session."""
+    return db_service.verify_session_ownership(session_id, user_id)
 
 # In-memory cache for generated graphs (for performance)
 graph_cache = {}
@@ -26,44 +61,57 @@ class PathRequest(BaseModel):
 
 
 @router.post("/build/{session_id}")
-async def build_graph(session_id: str, user_id: Optional[int] = None):
+async def build_graph(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Build knowledge graph from research session
+    Build knowledge graph from research session (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
-        user_id: Optional user ID for audit
+        current_user: Authenticated user from JWT token
 
     Returns:
         Graph data with nodes and edges
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
-        # Try to load session data from database first
-        session = db_service.get_session_details(session_id)
+        # Try to load from file first (same as GET endpoint for consistency)
+        session_data = None
+        session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
 
-        if session:
-            # Get analyses from database
-            analyses = db_service.get_session_analyses(session_id)
-            essay = db_service.get_session_essay(session_id)
-
-            print(f"[Graph] Loaded {len(analyses)} analyses from database for session {session_id}")
-
-            session_data = {
-                'query': session['query'],
-                'analyses': analyses if analyses else [],
-                'essay': essay.get('full_content') if essay else None
-            }
-        else:
-            # Fallback to file-based data
-            session_file = os.path.join(ANALYSIS_DIR, f"research_{session_id}.json")
-
-            if not os.path.exists(session_file):
-                raise HTTPException(status_code=404, detail="Research session not found")
-
+        if os.path.exists(session_file):
             with open(session_file, 'r', encoding='utf-8') as f:
                 session_data = json.load(f)
+            print(f"[Graph] Loaded session data from file for session {session_id}")
+        else:
+            # Fallback to database
+            session = db_service.get_session_details(session_id)
+
+            if session:
+                analyses = db_service.get_session_analyses(session_id)
+                essay = db_service.get_session_essay(session_id)
+
+                print(f"[Graph] Loaded {len(analyses)} analyses from database for session {session_id}")
+
+                session_data = {
+                    'query': session['query'],
+                    'analyses': analyses if analyses else [],
+                    'essay': essay.get('full_content') if essay else None
+                }
+
+        if not session_data:
+            raise HTTPException(status_code=404, detail="Research session not found")
 
         # Build graph
         builder = GraphBuilder()
@@ -89,6 +137,8 @@ async def build_graph(session_id: str, user_id: Optional[int] = None):
             }
         }
 
+    except HTTPException:
+        raise
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Session file not found")
     except Exception as e:
@@ -96,17 +146,29 @@ async def build_graph(session_id: str, user_id: Optional[int] = None):
 
 
 @router.get("/data/{session_id}")
-async def get_graph_data(session_id: str):
+async def get_graph_data(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Retrieve graph data for a session
+    Retrieve graph data for a session (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Graph data
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
         # Check cache first
@@ -183,17 +245,29 @@ async def get_graph_data(session_id: str):
 
 
 @router.get("/analyze/{session_id}")
-async def analyze_graph(session_id: str):
+async def analyze_graph(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Analyze graph and compute metrics
+    Analyze graph and compute metrics (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Analysis results with metrics and insights
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
         # Get graph data
@@ -213,23 +287,38 @@ async def analyze_graph(session_id: str):
             "analysis": analysis_results
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Graph analysis failed: {str(e)}")
 
 
 @router.post("/find-path/{session_id}")
-async def find_path(session_id: str, path_request: PathRequest):
+async def find_path(
+    session_id: str,
+    path_request: PathRequest,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Find shortest path between two nodes
+    Find shortest path between two nodes (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
         path_request: Source and target node IDs
+        current_user: Authenticated user from JWT token
 
     Returns:
         Path information
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
         # Get graph data
@@ -248,22 +337,36 @@ async def find_path(session_id: str, path_request: PathRequest):
             "path": path_info
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Path finding failed: {str(e)}")
 
 
 @router.get("/clusters/{session_id}")
-async def get_clusters(session_id: str):
+async def get_clusters(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Get community clusters from graph
+    Get community clusters from graph (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Community detection results
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
         # Get graph data
@@ -280,23 +383,38 @@ async def get_clusters(session_id: str):
             "total_clusters": len(communities)
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Cluster detection failed: {str(e)}")
 
 
 @router.get("/central-nodes/{session_id}")
-async def get_central_nodes(session_id: str, top_k: int = 10):
+async def get_central_nodes(
+    session_id: str,
+    top_k: int = 10,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Get most central/influential nodes
+    Get most central/influential nodes (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
         top_k: Number of top nodes to return
+        current_user: Authenticated user from JWT token
 
     Returns:
         Central nodes by different metrics
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
         # Try to get from database first
@@ -324,22 +442,36 @@ async def get_central_nodes(session_id: str, top_k: int = 10):
             "source": "computed"
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Central node analysis failed: {str(e)}")
 
 
 @router.get("/stats/{session_id}")
-async def get_graph_stats(session_id: str):
+async def get_graph_stats(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Get graph statistics
+    Get graph statistics (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Graph statistics
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
         db_session_id = db_service.get_session_id(session_id)
@@ -353,21 +485,37 @@ async def get_graph_stats(session_id: str):
 
         raise HTTPException(status_code=404, detail="Graph not found for this session")
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
 
 
 @router.delete("/cache/{session_id}")
-async def clear_graph_cache(session_id: str):
+async def clear_graph_cache(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Clear cached graph data for a session
+    Clear cached graph data for a session (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Success message
     """
+    db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
+
     if session_id in graph_cache:
         del graph_cache[session_id]
         return {

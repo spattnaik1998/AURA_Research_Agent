@@ -4,7 +4,8 @@ Handles research orchestration and status tracking
 Integrated with SQL Server database
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import asyncio
@@ -12,6 +13,9 @@ import logging
 from datetime import datetime
 from ..utils.image_analyzer import get_image_analyzer
 from ..services.db_service import get_db_service
+from ..services.auth_service import get_auth_service
+
+security = HTTPBearer(auto_error=False)
 
 # Setup logger
 logger = logging.getLogger('aura.research')
@@ -22,10 +26,65 @@ router = APIRouter(prefix="/research", tags=["research"])
 active_sessions: Dict[str, Dict[str, Any]] = {}
 
 
+# ==================== Authentication Helpers ====================
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Optional[Dict[str, Any]]:
+    """
+    Get current user from JWT token (optional).
+    Returns None if no token or invalid token.
+    """
+    if not credentials:
+        return None
+
+    auth_service = get_auth_service()
+    return auth_service.get_current_user(credentials.credentials)
+
+
+async def require_auth(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Dict[str, Any]:
+    """
+    Require valid authentication.
+    Raises 401 if not authenticated.
+    """
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    auth_service = get_auth_service()
+    user = auth_service.get_current_user(credentials.credentials)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    return user
+
+
+def verify_session_access(
+    session_id: str,
+    user_id: int,
+    db_service
+) -> bool:
+    """
+    Verify that a user has access to a session.
+    Users can only access their own sessions.
+    """
+    return db_service.verify_session_ownership(session_id, user_id)
+
+
 class ResearchRequest(BaseModel):
     """Research request model"""
     query: str
-    user_id: Optional[int] = None
+    # Note: user_id is now extracted from JWT token, not from request body
 
 
 class ImageAnalysisRequest(BaseModel):
@@ -189,15 +248,17 @@ async def run_research_workflow(
 async def start_research(
     request: ResearchRequest,
     background_tasks: BackgroundTasks,
-    http_request: Request
+    http_request: Request,
+    current_user: Dict[str, Any] = Depends(require_auth)
 ):
     """
-    Start a new research session
+    Start a new research session (requires authentication)
 
     Args:
         request: Research request with query
         background_tasks: FastAPI background tasks
         http_request: HTTP request for client info
+        current_user: Authenticated user from JWT token
 
     Returns:
         Research response with session ID
@@ -205,12 +266,16 @@ async def start_research(
     Example:
         ```
         POST /research/start
+        Authorization: Bearer <token>
         {
             "query": "machine learning in healthcare"
         }
         ```
     """
     try:
+        # Get user_id from authenticated token
+        user_id = current_user["user_id"]
+
         # Generate session ID
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         session_id = timestamp
@@ -233,7 +298,7 @@ async def start_research(
             "result": None,
             "error": None,
             "started_at": datetime.now().isoformat(),
-            "user_id": request.user_id
+            "user_id": user_id
         }
 
         # Start research in background with database integration
@@ -241,7 +306,7 @@ async def start_research(
             run_research_workflow,
             request.query,
             session_id,
-            request.user_id,
+            user_id,
             ip_address
         )
 
@@ -256,12 +321,16 @@ async def start_research(
 
 
 @router.get("/status/{session_id}", response_model=ResearchStatus)
-async def get_research_status(session_id: str):
+async def get_research_status(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Get status of a research session
+    Get status of a research session (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Research status with progress information
@@ -269,11 +338,21 @@ async def get_research_status(session_id: str):
     Example:
         ```
         GET /research/status/20251018_133827
+        Authorization: Bearer <token>
         ```
     """
+    db_service = get_db_service()
+    user_id = current_user["user_id"]
+
     # Check in-memory cache first (for active sessions)
     if session_id in active_sessions:
         session = active_sessions[session_id]
+        # Verify ownership for in-memory sessions
+        if session.get("user_id") != user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to access this session"
+            )
         return ResearchStatus(
             session_id=session["session_id"],
             query=session["query"],
@@ -284,8 +363,14 @@ async def get_research_status(session_id: str):
             error=session["error"]
         )
 
+    # Verify ownership for database sessions
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
+
     # Check database for historical sessions
-    db_service = get_db_service()
     session = db_service.get_session_details(session_id)
 
     if session:
@@ -308,25 +393,28 @@ async def get_research_status(session_id: str):
 
 
 @router.get("/sessions")
-async def list_research_sessions(user_id: Optional[int] = None):
+async def list_research_sessions(
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    List all research sessions (active and completed)
+    List research sessions for the authenticated user (active and completed)
 
     Args:
-        user_id: Optional user ID to filter sessions
+        current_user: Authenticated user from JWT token
 
     Returns:
-        List of session information
+        List of session information for the current user only
 
     Example:
         ```
         GET /research/sessions
-        GET /research/sessions?user_id=1
+        Authorization: Bearer <token>
         ```
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
 
-    # Get from database
+    # Get only the current user's sessions from database
     db_sessions = db_service.get_recent_sessions(user_id=user_id, limit=50)
 
     sessions = []
@@ -344,16 +432,18 @@ async def list_research_sessions(user_id: Optional[int] = None):
             "source": "database"
         })
 
-    # Add any in-memory sessions not in database yet
+    # Add any in-memory sessions for this user not in database yet
     for session_id, session_data in active_sessions.items():
-        if not any(s["session_id"] == session_id for s in sessions):
-            sessions.append({
-                "session_id": session_id,
-                "query": session_data["query"],
-                "status": session_data["status"],
-                "started_at": session_data["started_at"],
-                "source": "memory"
-            })
+        # Only include sessions owned by the current user
+        if session_data.get("user_id") == user_id:
+            if not any(s["session_id"] == session_id for s in sessions):
+                sessions.append({
+                    "session_id": session_id,
+                    "query": session_data["query"],
+                    "status": session_data["status"],
+                    "started_at": session_data["started_at"],
+                    "source": "memory"
+                })
 
     # Sort by started_at (newest first)
     sessions.sort(key=lambda x: x.get("started_at", ""), reverse=True)
@@ -365,12 +455,17 @@ async def list_research_sessions(user_id: Optional[int] = None):
 
 
 @router.get("/session/{session_id}/details")
-async def get_session_details(session_id: str):
+async def get_session_details(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
     Get detailed information about a research session including papers and analyses
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Full session details with papers and analyses
@@ -378,9 +473,18 @@ async def get_session_details(session_id: str):
     Example:
         ```
         GET /research/session/20251018_133827/details
+        Authorization: Bearer <token>
         ```
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     # Get session details
     session = db_service.get_session_details(session_id)
@@ -406,12 +510,16 @@ async def get_session_details(session_id: str):
 
 
 @router.delete("/session/{session_id}")
-async def clear_session(session_id: str):
+async def clear_session(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Clear a research session from memory
+    Clear a research session from memory (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Success message
@@ -419,9 +527,18 @@ async def clear_session(session_id: str):
     Example:
         ```
         DELETE /research/session/20251018_133827
+        Authorization: Bearer <token>
         ```
     """
+    user_id = current_user["user_id"]
+
     if session_id in active_sessions:
+        # Verify ownership
+        if active_sessions[session_id].get("user_id") != user_id:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to delete this session"
+            )
         del active_sessions[session_id]
         return {"message": f"Session {session_id} cleared from memory"}
     else:

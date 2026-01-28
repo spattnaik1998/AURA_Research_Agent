@@ -47,7 +47,10 @@ class GraphVisualizer {
             this.showLoading();
 
             // Fetch graph data
-            const response = await fetch(`http://localhost:8000/graph/data/${sessionId}`);
+            const token = localStorage.getItem('aura_access_token');
+            const response = await fetch(`http://localhost:8000/graph/data/${sessionId}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
             const data = await response.json();
 
             if (!data.success) {
@@ -70,7 +73,10 @@ class GraphVisualizer {
 
     async loadAnalysis(sessionId) {
         try {
-            const response = await fetch(`http://localhost:8000/graph/analyze/${sessionId}`);
+            const token = localStorage.getItem('aura_access_token');
+            const response = await fetch(`http://localhost:8000/graph/analyze/${sessionId}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
             const data = await response.json();
 
             if (data.success) {

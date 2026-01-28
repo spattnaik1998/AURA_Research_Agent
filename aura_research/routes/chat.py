@@ -3,14 +3,48 @@ Chat API routes for AURA RAG chatbot
 Integrated with SQL Server database
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from ..rag.chatbot import get_chatbot, clear_chatbot
 from ..services.db_service import get_db_service
+from ..services.auth_service import get_auth_service
 
+security = HTTPBearer(auto_error=False)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+# ==================== Authentication Helpers ====================
+
+async def require_auth(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Dict[str, Any]:
+    """Require valid authentication. Raises 401 if not authenticated."""
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    auth_service = get_auth_service()
+    user = auth_service.get_current_user(credentials.credentials)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    return user
+
+
+def verify_session_access(session_id: str, user_id: int, db_service) -> bool:
+    """Verify that a user has access to a session."""
+    return db_service.verify_session_ownership(session_id, user_id)
 
 
 class ChatRequest(BaseModel):
@@ -19,7 +53,7 @@ class ChatRequest(BaseModel):
     session_id: str
     conversation_id: Optional[str] = None
     language: Optional[str] = "English"
-    user_id: Optional[int] = None
+    # Note: user_id is now extracted from JWT token, not from request body
 
 
 class ChatResponse(BaseModel):
@@ -38,12 +72,16 @@ class ChatHistoryResponse(BaseModel):
 
 
 @router.post("/", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+async def chat(
+    request: ChatRequest,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Send message to RAG chatbot
+    Send message to RAG chatbot (requires authentication and session ownership)
 
     Args:
         request: Chat request with message and session_id
+        current_user: Authenticated user from JWT token
 
     Returns:
         Chat response with answer and context
@@ -51,6 +89,7 @@ async def chat(request: ChatRequest):
     Example:
         ```
         POST /chat
+        Authorization: Bearer <token>
         {
             "message": "What are the main findings about machine learning in healthcare?",
             "session_id": "20251018_133827",
@@ -60,6 +99,14 @@ async def chat(request: ChatRequest):
     """
     try:
         db_service = get_db_service()
+        user_id = current_user["user_id"]
+
+        # Verify the user owns this session
+        if not verify_session_access(request.session_id, user_id, db_service):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to access this session"
+            )
 
         # Get or create conversation in database (non-fatal)
         db_conv = None
@@ -70,7 +117,7 @@ async def chat(request: ChatRequest):
                 db_conv = db_service.get_or_create_conversation(
                     session_code=request.session_id,
                     conversation_code=request.conversation_id,
-                    user_id=request.user_id,
+                    user_id=user_id,
                     language=language_code
                 )
             except Exception as e:
@@ -95,7 +142,7 @@ async def chat(request: ChatRequest):
                     conversation_id=db_conv['conversation_id'],
                     role='user',
                     content=request.message,
-                    user_id=request.user_id
+                    user_id=user_id
                 )
 
                 # Save assistant response
@@ -104,7 +151,7 @@ async def chat(request: ChatRequest):
                     role='assistant',
                     content=result['response'],
                     context_used=_parse_context(result.get('context_used', '')),
-                    user_id=request.user_id
+                    user_id=user_id
                 )
             except Exception as db_error:
                 print(f"[Chat] Warning: Failed to save messages to DB: {db_error}")
@@ -115,6 +162,8 @@ async def chat(request: ChatRequest):
 
         return response
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -122,13 +171,18 @@ async def chat(request: ChatRequest):
 
 
 @router.get("/history/{session_id}/{conversation_id}", response_model=ChatHistoryResponse)
-async def get_history(session_id: str, conversation_id: str = "default"):
+async def get_history(
+    session_id: str,
+    conversation_id: str = "default",
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Get conversation history
+    Get conversation history (requires authentication and session ownership)
 
     Args:
         session_id: Research session ID
         conversation_id: Conversation ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         List of messages in conversation
@@ -136,10 +190,19 @@ async def get_history(session_id: str, conversation_id: str = "default"):
     Example:
         ```
         GET /chat/history/20251018_133827/user123
+        Authorization: Bearer <token>
         ```
     """
     try:
         db_service = get_db_service()
+        user_id = current_user["user_id"]
+
+        # Verify ownership
+        if not verify_session_access(session_id, user_id, db_service):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to access this session"
+            )
 
         # Try to get from database first
         db_conv = db_service.chat.get_conversation_by_code(conversation_id)
@@ -163,6 +226,8 @@ async def get_history(session_id: str, conversation_id: str = "default"):
             conversation_id=conversation_id
         )
 
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -170,12 +235,16 @@ async def get_history(session_id: str, conversation_id: str = "default"):
 
 
 @router.delete("/{session_id}")
-async def clear_chat_session(session_id: str):
+async def clear_chat_session(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    Clear chatbot instance for session
+    Clear chatbot instance for session (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Success message
@@ -183,52 +252,57 @@ async def clear_chat_session(session_id: str):
     Example:
         ```
         DELETE /chat/20251018_133827
+        Authorization: Bearer <token>
         ```
     """
     try:
+        db_service = get_db_service()
+        user_id = current_user["user_id"]
+
+        # Verify ownership
+        if not verify_session_access(session_id, user_id, db_service):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to access this session"
+            )
+
         clear_chatbot(session_id)
         return {"message": f"Chatbot session {session_id} cleared"}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Clear error: {str(e)}")
 
 
 @router.get("/sessions")
-async def list_sessions(user_id: Optional[int] = None, include_all: bool = False):
+async def list_sessions(
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    List available research sessions with query names
+    List available research sessions for the authenticated user
 
     Args:
-        user_id: User ID to filter sessions (required for user-specific sessions)
-        include_all: If True and user_id is None, returns all sessions (admin only)
+        current_user: Authenticated user from JWT token
 
     Returns:
-        List of sessions with session_id, query, and timestamp
+        List of sessions with session_id, query, and timestamp (only user's own sessions)
 
     Example:
         ```
-        GET /chat/sessions?user_id=1
-        GET /chat/sessions?include_all=true  (shows all - for backwards compatibility)
+        GET /chat/sessions
+        Authorization: Bearer <token>
         ```
     """
     try:
         db_service = get_db_service()
+        user_id = current_user["user_id"]
 
-        print(f"[Chat Sessions] Request - user_id: {user_id}, include_all: {include_all}")
+        print(f"[Chat Sessions] Request for user_id: {user_id}")
 
-        # Get completed sessions from database
-        # If user_id is provided, filter by user; otherwise show all (backwards compatible)
-        if user_id is not None:
-            db_sessions = db_service.get_completed_sessions(limit=50, user_id=user_id)
-            print(f"[Chat Sessions] Filtering by user_id={user_id}, found {len(db_sessions)} sessions")
-        elif include_all:
-            db_sessions = db_service.get_completed_sessions(limit=50, user_id=None)
-            print(f"[Chat Sessions] Showing all sessions (include_all=True), found {len(db_sessions)} sessions")
-        else:
-            # Default: return empty if no user specified (secure by default)
-            # For backwards compatibility during transition, still show all
-            db_sessions = db_service.get_completed_sessions(limit=50, user_id=None)
-            print(f"[Chat Sessions] No user_id, showing all sessions, found {len(db_sessions)} sessions")
+        # Get only the current user's completed sessions
+        db_sessions = db_service.get_completed_sessions(limit=50, user_id=user_id)
+        print(f"[Chat Sessions] Found {len(db_sessions)} sessions for user {user_id}")
 
         sessions = []
         for session in db_sessions:
@@ -251,31 +325,31 @@ async def list_sessions(user_id: Optional[int] = None, include_all: bool = False
                 "date": formatted_date,
                 "status": session['status'],
                 "conversation_count": len(conversations),
-                "has_essay": bool(session.get('has_essay', 0)),
-                "user_id": session.get('user_id')
+                "has_essay": bool(session.get('has_essay', 0))
             })
-
-        # Fallback to file-based sessions if database is empty
-        if not sessions:
-            sessions = await _get_file_based_sessions()
 
         return {
             "sessions": sessions,
             "count": len(sessions)
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"List error: {str(e)}")
 
 
 @router.get("/conversations/{session_id}")
-async def list_conversations(session_id: str, user_id: Optional[int] = None):
+async def list_conversations(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
-    List all conversations for a research session
+    List all conversations for a research session (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
-        user_id: Optional user ID to filter
+        current_user: Authenticated user from JWT token
 
     Returns:
         List of conversations
@@ -283,10 +357,19 @@ async def list_conversations(session_id: str, user_id: Optional[int] = None):
     Example:
         ```
         GET /chat/conversations/20251018_133827
+        Authorization: Bearer <token>
         ```
     """
     try:
         db_service = get_db_service()
+        user_id = current_user["user_id"]
+
+        # Verify ownership
+        if not verify_session_access(session_id, user_id, db_service):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to access this session"
+            )
 
         conversations = db_service.get_session_conversations(session_id)
 
@@ -296,6 +379,8 @@ async def list_conversations(session_id: str, user_id: Optional[int] = None):
             "count": len(conversations)
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error listing conversations: {str(e)}")
 

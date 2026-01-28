@@ -4,7 +4,8 @@ Research question generation and proposal building
 Integrated with SQL Server database
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import json
@@ -12,8 +13,42 @@ import os
 from ..ideation.question_generator import QuestionGenerator
 from ..utils.config import ANALYSIS_DIR
 from ..services.db_service import get_db_service
+from ..services.auth_service import get_auth_service
+
+security = HTTPBearer(auto_error=False)
 
 router = APIRouter(prefix="/ideation", tags=["ideation"])
+
+
+# ==================== Authentication Helpers ====================
+
+async def require_auth(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> Dict[str, Any]:
+    """Require valid authentication. Raises 401 if not authenticated."""
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    auth_service = get_auth_service()
+    user = auth_service.get_current_user(credentials.credentials)
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
+    return user
+
+
+def verify_session_access(session_id: str, user_id: int, db_service) -> bool:
+    """Verify that a user has access to a session."""
+    return db_service.verify_session_ownership(session_id, user_id)
 
 # In-memory cache for generated questions (for fast access)
 questions_cache = {}
@@ -30,21 +65,30 @@ async def generate_questions(
     session_id: str,
     num_questions: int = 15,
     include_gaps: bool = True,
-    user_id: Optional[int] = None
+    current_user: Dict[str, Any] = Depends(require_auth)
 ):
     """
     Generate research questions from a completed research session
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
         num_questions: Number of questions to generate (default 15)
         include_gaps: Whether to identify gaps first (default True)
-        user_id: Optional user ID for audit
+        current_user: Authenticated user from JWT token
 
     Returns:
         Generated questions with gaps and scores
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
         # Try to load session data from database first
@@ -95,6 +139,8 @@ async def generate_questions(
             }
         }
 
+    except HTTPException:
+        raise
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Session file not found")
     except Exception as e:
@@ -105,17 +151,30 @@ async def generate_questions(
 
 
 @router.get("/questions/{session_id}")
-async def get_questions(session_id: str):
+async def get_questions(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
     Retrieve previously generated questions for a session
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Previously generated questions
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     # Check cache first
     if session_id in questions_cache:
@@ -150,17 +209,30 @@ async def get_questions(session_id: str):
 
 
 @router.get("/gaps/{session_id}")
-async def get_gaps(session_id: str):
+async def get_gaps(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
     Get identified research gaps for a session
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Research gaps identified
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     # Check cache first
     if session_id in questions_cache:
@@ -193,19 +265,30 @@ async def get_gaps(session_id: str):
 @router.post("/refine-question/{session_id}")
 async def refine_question(
     session_id: str,
-    request: RefineQuestionRequest
+    request: RefineQuestionRequest,
+    current_user: Dict[str, Any] = Depends(require_auth)
 ):
     """
     Refine a research question based on user feedback
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
         request: Question and feedback
+        current_user: Authenticated user from JWT token
 
     Returns:
         Refined question variations
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     try:
         # Get research context
@@ -242,6 +325,8 @@ async def refine_question(
             "refinement": result
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -250,17 +335,30 @@ async def refine_question(
 
 
 @router.get("/questions/{session_id}/by-type")
-async def get_questions_by_type(session_id: str):
+async def get_questions_by_type(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
     Get questions grouped by type
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Questions grouped by type
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     # Try database first
     grouped = db_service.ideation.get_questions_grouped_by_type(
@@ -304,18 +402,32 @@ async def get_questions_by_type(session_id: str):
 
 
 @router.get("/questions/{session_id}/top")
-async def get_top_questions(session_id: str, limit: int = 5):
+async def get_top_questions(
+    session_id: str,
+    limit: int = 5,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
     Get top-ranked questions by overall score
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
         limit: Number of top questions to return
+        current_user: Authenticated user from JWT token
 
     Returns:
         Top-ranked questions
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     # Try database first
     db_session_id = db_service.get_session_id(session_id)
@@ -353,16 +465,31 @@ async def get_top_questions(session_id: str, limit: int = 5):
 
 
 @router.delete("/cache/{session_id}")
-async def clear_questions_cache(session_id: str):
+async def clear_questions_cache(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
     Clear cached question data for a session
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Success message
     """
+    db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
+
     if session_id in questions_cache:
         del questions_cache[session_id]
         return {
@@ -377,17 +504,30 @@ async def clear_questions_cache(session_id: str):
 
 
 @router.get("/stats/{session_id}")
-async def get_question_stats(session_id: str):
+async def get_question_stats(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
     """
     Get statistics about generated questions
+    (requires authentication and ownership)
 
     Args:
         session_id: Research session ID
+        current_user: Authenticated user from JWT token
 
     Returns:
         Statistics about questions
     """
     db_service = get_db_service()
+    user_id = current_user["user_id"]
+
+    # Verify ownership
+    if not verify_session_access(session_id, user_id, db_service):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
 
     # Try database first
     db_session_id = db_service.get_session_id(session_id)
