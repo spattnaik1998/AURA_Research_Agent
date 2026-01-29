@@ -14,7 +14,8 @@ from ..database.repositories import (
     GraphRepository,
     IdeationRepository,
     AuditLogRepository,
-    UserRepository
+    UserRepository,
+    AudioRepository
 )
 
 
@@ -47,6 +48,7 @@ class DatabaseService:
         self.ideation = IdeationRepository()
         self.audit = AuditLogRepository()
         self.users = UserRepository()
+        self.audio = AudioRepository()
 
         # Cache for session_code to session_id mapping
         self._session_cache: Dict[str, int] = {}
@@ -409,6 +411,80 @@ class DatabaseService:
             return None
 
         return self.essays.get_by_session(session_id)
+
+    # ==================== Audio Methods ====================
+
+    def create_audio_record(
+        self,
+        session_code: str,
+        audio_filename: str,
+        file_size_bytes: int,
+        voice_id: str = "21m00Tcm4TlvDq8ikWAM",
+        user_id: Optional[int] = None
+    ) -> Optional[int]:
+        """
+        Create an audio record in the database.
+
+        Args:
+            session_code: Session identifier
+            audio_filename: Name of the audio file
+            file_size_bytes: Size of the audio file in bytes
+            voice_id: ElevenLabs voice ID
+            user_id: Optional user ID for audit logging
+
+        Returns:
+            audio_id or None if failed
+        """
+        session_id = self.get_session_id(session_code)
+        if not session_id:
+            return None
+
+        try:
+            audio_id = self.audio.create(
+                session_id=session_id,
+                audio_filename=audio_filename,
+                file_size_bytes=file_size_bytes,
+                voice_id=voice_id
+            )
+
+            print(f"[DBService] Audio record created for session {session_code}, ID: {audio_id}")
+            return audio_id
+
+        except Exception as e:
+            print(f"[DBService] Error creating audio record: {e}")
+            return None
+
+    def get_session_audio(self, session_code: str) -> Optional[Dict[str, Any]]:
+        """Get audio metadata for a session."""
+        session_id = self.get_session_id(session_code)
+        if not session_id:
+            return None
+
+        return self.audio.get_by_session(session_id)
+
+    def audio_exists(self, session_code: str) -> bool:
+        """Check if audio exists for a session."""
+        session_id = self.get_session_id(session_code)
+        if not session_id:
+            return False
+
+        return self.audio.audio_exists(session_id)
+
+    def update_audio_access_time(self, session_code: str) -> bool:
+        """Update the last_accessed_at timestamp for audio."""
+        session_id = self.get_session_id(session_code)
+        if not session_id:
+            return False
+
+        return self.audio.update_last_accessed(session_id)
+
+    def delete_audio_record(self, session_code: str) -> bool:
+        """Delete audio record for a session."""
+        session_id = self.get_session_id(session_code)
+        if not session_id:
+            return False
+
+        return self.audio.delete_by_session(session_id)
 
     # ==================== Chat Methods ====================
 

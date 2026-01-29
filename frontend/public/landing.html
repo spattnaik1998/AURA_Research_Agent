@@ -4,25 +4,222 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AURA - Autonomous Unified Research Assistant</title>
-    <link href="output.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        body {
+        :root {
+            /* Dark theme - sophisticated navy and slate */
+            --bg-void: #0f1117;
+            --bg-deep: #151b28;
+            --bg-surface: #1a2332;
+            --bg-elevated: #232f42;
+            --bg-hover: #2d3a50;
+            --border-subtle: rgba(255,255,255,0.05);
+            --border-medium: rgba(255,255,255,0.08);
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --accent-primary: #fbbf24;
+            --accent-secondary: #f59e0b;
+            --success: #34d399;
+            --gradient-main: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        }
+
+        [data-theme="light"] {
+            --bg-void: #fafbfc;
+            --bg-deep: #f5f7fb;
+            --bg-surface: #ffffff;
+            --bg-elevated: #f8f9fb;
+            --bg-hover: #f1f3f5;
+            --border-subtle: rgba(51,65,85,0.06);
+            --border-medium: rgba(51,65,85,0.1);
+            --text-primary: #0f1117;
+            --text-secondary: #334155;
+            --text-muted: #64748b;
+            --accent-primary: #d97706;
+            --accent-secondary: #f59e0b;
+            --success: #22c55e;
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            padding: 0;
             font-family: 'Inter', sans-serif;
+            background: var(--bg-void);
+            color: var(--text-primary);
+            transition: background 0.3s ease, color 0.3s ease;
+            line-height: 1.5;
         }
 
-        /* Subtle hover animation for cards */
+        /* Enhanced animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 100% 60% at 50% -10%, rgba(251,191,36,0.08), transparent),
+                radial-gradient(ellipse 80% 50% at 80% 80%, rgba(99,102,241,0.06), transparent),
+                radial-gradient(ellipse 60% 40% at 20% 50%, rgba(139,92,246,0.04), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Typography */
+        .serif-display {
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .mono { font-family: 'IBM Plex Mono', monospace; }
+
+        h1, h2, h3 {
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        /* Header */
+        .header-premium {
+            background: rgba(15, 17, 23, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+        }
+
+        [data-theme="light"] .header-premium {
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Buttons */
+        .btn-primary {
+            background: var(--gradient-main);
+            color: #0f1117;
+            padding: 0.875rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.01em;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(251, 191, 36, 0.25);
+        }
+
+        .btn-secondary {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            padding: 0.875rem 2rem;
+            border-radius: 8px;
+            font-weight: 500;
+            border: 1px solid var(--border-medium);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-primary);
+        }
+
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: color 0.2s ease;
+        }
+
+        .btn-link:hover {
+            color: var(--text-primary);
+        }
+
+        /* Input fields */
+        .input-field {
+            width: 100%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-medium);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+        }
+
+        .input-field::placeholder { color: var(--text-muted); }
+
+        /* Feature card */
         .feature-card {
-            transition: box-shadow 0.2s ease, transform 0.2s ease;
-        }
-        .feature-card:hover {
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            position: relative;
         }
 
-        /* Tab switching */
+        .feature-card:hover {
+            border-color: rgba(251, 191, 36, 0.2);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(251, 191, 36, 0.1);
+        }
+
+        /* Icon containers */
+        .icon-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(251, 191, 36, 0.1);
+            color: var(--accent-primary);
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Glass panels */
+        .glass-panel {
+            background: rgba(26, 35, 50, 0.4);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        [data-theme="light"] .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Modal */
+        .modal-content {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+        }
+
+        /* Tab content */
         .tab-content {
             display: none;
         }
@@ -30,258 +227,422 @@
             display: block;
         }
 
-        /* Loading spinner */
-        .spinner {
-            border: 3px solid #E5E7EB;
-            border-top: 3px solid #1E40AF;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
+        /* Tab headers */
+        .tab-header {
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            gap: 2rem;
         }
+
+        .tab-button {
+            color: var(--text-secondary);
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-weight: 500;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .tab-button.active {
+            color: var(--accent-primary);
+            border-bottom-color: var(--accent-primary);
+        }
+
+        /* Validation states */
+        .input-valid {
+            border-color: var(--success);
+        }
+
+        .input-invalid {
+            border-color: #f87171;
+        }
+
+        /* Messages */
+        .message-error {
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.2);
+            color: #fecaca;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .message-success {
+            background: rgba(52, 211, 153, 0.1);
+            border: 1px solid rgba(52, 211, 153, 0.2);
+            color: #a7f3d0;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        /* Spinner */
+        .spinner {
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top: 2px solid var(--accent-primary);
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 0.8s linear infinite;
+        }
+
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
 
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
+        /* Theme toggle */
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-medium);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
         }
-        ::-webkit-scrollbar-track {
-            background: #F5F5F5;
+
+        .theme-toggle:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
         }
+
+        /* Hero section */
+        .hero-section {
+            text-align: center;
+            padding: 6rem 2rem 4rem;
+            margin-bottom: 4rem;
+            position: relative;
+            z-index: 10;
+        }
+
+        .hero-title {
+            font-size: 3.5rem;
+            line-height: 1.1;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Feature grid */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        /* How it works section */
+        .steps-container {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .step-item {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .step-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .step-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: var(--accent-primary);
+            color: #0f1117;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .step-content h3 {
+            color: var(--text-primary);
+            margin: 0 0 0.5rem 0;
+            font-size: 1rem;
+        }
+
+        .step-content p {
+            color: var(--text-muted);
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in { animation: fadeInUp 0.5s ease-out; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb {
-            background: #D1D5DB;
-            border-radius: 4px;
+            background: var(--border-medium);
+            border-radius: 3px;
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #9CA3AF;
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2.25rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1rem;
+            }
+
+            .hero-cta {
+                flex-direction: column;
+            }
+
+            .hero-cta button {
+                width: 100%;
+            }
         }
     </style>
 </head>
-<body class="bg-white min-h-screen text-gray-900">
-    <!-- Navigation -->
-    <nav class="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center">
-                    <div class="w-10 h-10 bg-blue-800 rounded-xl flex items-center justify-center">
-                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+<body>
+    <!-- Header -->
+    <header class="header-premium">
+        <div class="max-w-7xl mx-auto px-6 py-4 relative z-50">
+            <div class="flex items-center justify-between">
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background: var(--gradient-main);">
+                        <svg class="w-5 h-5 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                         </svg>
                     </div>
-                    <span class="ml-3 text-xl font-bold text-blue-800">AURA</span>
-                    <span class="ml-2 text-sm text-gray-500">Research Assistant</span>
+                    <h1 class="serif-display text-xl" style="color: var(--text-primary);">AURA</h1>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <a href="#features" class="text-gray-600 hover:text-gray-900 transition text-sm font-medium">Features</a>
-                    <a href="#about" class="text-gray-600 hover:text-gray-900 transition text-sm font-medium">About</a>
-                    <button onclick="openAuthModal('login')" class="px-4 py-2 text-gray-600 hover:text-gray-900 transition text-sm font-medium">
-                        Sign In
+
+                <!-- Navigation & Controls -->
+                <div class="flex items-center gap-4">
+                    <button id="theme-toggle" onclick="toggleTheme()" class="theme-toggle" title="Toggle theme">
+                        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                        </svg>
+                        <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
                     </button>
-                    <button onclick="openAuthModal('register')" class="px-4 py-2 bg-blue-800 hover:bg-blue-900 text-white rounded-lg transition text-sm font-medium">
-                        Get Started
-                    </button>
+                    <button onclick="openAuthModal('login')" class="btn-link">Sign In</button>
+                    <button onclick="openAuthModal('register')" class="btn-primary">Get Started</button>
                 </div>
             </div>
         </div>
-    </nav>
+    </header>
 
-    <!-- Hero Section -->
-    <section class="pt-32 pb-16 px-4 bg-gray-50">
-        <div class="max-w-4xl mx-auto text-center">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-2xl mb-6">
-                <svg class="w-8 h-8 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
+    <!-- Main Content -->
+    <main class="relative z-10">
+        <!-- Hero Section -->
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="hero-section animate-fade-in">
+                <h2 class="hero-title serif-display">
+                    Transform Your
+                    <span style="background: var(--gradient-main); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Research</span>
+                </h2>
+                <p class="hero-subtitle">
+                    AURA is an autonomous research intelligence platform powered by multi-agent AI. Analyze papers, synthesize insights, and generate comprehensive essays in seconds.
+                </p>
+                <div class="hero-cta">
+                    <button onclick="openAuthModal('register')" class="btn-primary">Start Free Research</button>
+                    <button onclick="scrollToSection('how-it-works')" class="btn-secondary">Learn More</button>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 1.5rem;">
+                    No credit card required. 5 free research sessions to get started.
+                </p>
             </div>
 
-            <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-                Autonomous Unified<br>Research Assistant
-            </h1>
-
-            <p class="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
-                Harness the power of multi-agent AI to revolutionize your research.
-                AURA analyzes papers, synthesizes insights, and generates comprehensive research essays.
-            </p>
-
-            <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                <button onclick="openAuthModal('register')" class="px-8 py-3 bg-blue-800 hover:bg-blue-900 text-white rounded-lg text-base font-semibold transition">
-                    Start Researching Free
-                </button>
-                <button onclick="openAuthModal('login')" class="px-8 py-3 bg-white border border-gray-300 hover:border-gray-400 text-gray-700 rounded-lg text-base font-semibold transition">
-                    Sign In to Continue
-                </button>
-            </div>
-
-            <p class="mt-6 text-gray-500 text-sm">No credit card required. Start with 5 free research sessions.</p>
-        </div>
-    </section>
-
-    <!-- Features Section -->
-    <section id="features" class="py-16 px-4 bg-white">
-        <div class="max-w-6xl mx-auto">
-            <h2 class="text-2xl font-bold text-center text-gray-900 mb-2">Powerful Research Features</h2>
-            <p class="text-gray-600 text-center mb-12 max-w-xl mx-auto">
-                AURA combines cutting-edge AI with sophisticated research methodologies
-            </p>
-
-            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <!-- Feature 1 -->
-                <div class="feature-card bg-gray-50 rounded-xl p-6 border border-gray-200">
-                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-5 h-5 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
+            <!-- Features Section -->
+            <div id="features" class="mb-16">
+                <h3 style="font-size: 1.875rem; margin-bottom: 3rem; text-align: center;" class="serif-display">Powerful Capabilities</h3>
+                <div class="feature-grid">
+                    <!-- Multi-Agent Research -->
+                    <div class="feature-card animate-fade-in">
+                        <div class="icon-circle">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857"></path>
+                            </svg>
+                        </div>
+                        <h4 style="font-size: 1.125rem; margin-bottom: 0.75rem;">Multi-Agent Research</h4>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">
+                            Autonomous AI agents collaborate to fetch, analyze, and synthesize academic papers.
+                        </p>
                     </div>
-                    <h3 class="text-base font-semibold text-gray-900 mb-2">Multi-Agent Research</h3>
-                    <p class="text-gray-600 text-sm">
-                        Multiple AI agents work in parallel to analyze research papers, extracting key insights efficiently.
-                    </p>
-                </div>
 
-                <!-- Feature 2 -->
-                <div class="feature-card bg-gray-50 rounded-xl p-6 border border-gray-200">
-                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-5 h-5 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                        </svg>
+                    <!-- RAG Chatbot -->
+                    <div class="feature-card animate-fade-in" style="animation-delay: 0.1s;">
+                        <div class="icon-circle">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                            </svg>
+                        </div>
+                        <h4 style="font-size: 1.125rem; margin-bottom: 0.75rem;">RAG Chatbot</h4>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">
+                            Ask intelligent questions about your research with RAG-powered accuracy.
+                        </p>
                     </div>
-                    <h3 class="text-base font-semibold text-gray-900 mb-2">RAG Chatbot</h3>
-                    <p class="text-gray-600 text-sm">
-                        Ask questions about your research. Our RAG-powered chatbot provides accurate, contextual answers.
-                    </p>
-                </div>
 
-                <!-- Feature 3 -->
-                <div class="feature-card bg-gray-50 rounded-xl p-6 border border-gray-200">
-                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-5 h-5 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
+                    <!-- Knowledge Graph -->
+                    <div class="feature-card animate-fade-in" style="animation-delay: 0.2s;">
+                        <div class="icon-circle">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                            </svg>
+                        </div>
+                        <h4 style="font-size: 1.125rem; margin-bottom: 0.75rem;">Knowledge Graph</h4>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">
+                            Visualize relationships between concepts, papers, and methodologies.
+                        </p>
                     </div>
-                    <h3 class="text-base font-semibold text-gray-900 mb-2">Knowledge Graph</h3>
-                    <p class="text-gray-600 text-sm">
-                        Visualize connections between concepts, papers, and methodologies in interactive graphs.
-                    </p>
-                </div>
 
-                <!-- Feature 4 -->
-                <div class="feature-card bg-gray-50 rounded-xl p-6 border border-gray-200">
-                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                        <svg class="w-5 h-5 text-blue-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                    </div>
-                    <h3 class="text-base font-semibold text-gray-900 mb-2">Research Ideation</h3>
-                    <p class="text-gray-600 text-sm">
-                        Generate novel research questions and identify gaps in the literature automatically.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- About Section -->
-    <section id="about" class="py-16 px-4 bg-gray-50">
-        <div class="max-w-3xl mx-auto bg-white rounded-2xl p-8 md:p-10 border border-gray-200 shadow-sm">
-            <h2 class="text-2xl font-bold text-gray-900 mb-6">How AURA Works</h2>
-            <div class="space-y-6">
-                <div class="flex items-start gap-4">
-                    <div class="w-8 h-8 bg-blue-800 text-white rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold">1</div>
-                    <div>
-                        <h3 class="font-semibold text-gray-900">Enter Your Research Query</h3>
-                        <p class="text-gray-600 text-sm mt-1">Type your research topic or upload an image. AURA understands complex queries.</p>
-                    </div>
-                </div>
-                <div class="flex items-start gap-4">
-                    <div class="w-8 h-8 bg-blue-800 text-white rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold">2</div>
-                    <div>
-                        <h3 class="font-semibold text-gray-900">AI Agents Analyze Papers</h3>
-                        <p class="text-gray-600 text-sm mt-1">Multiple subordinate agents analyze papers in parallel, extracting key findings.</p>
-                    </div>
-                </div>
-                <div class="flex items-start gap-4">
-                    <div class="w-8 h-8 bg-blue-800 text-white rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold">3</div>
-                    <div>
-                        <h3 class="font-semibold text-gray-900">Synthesize & Explore</h3>
-                        <p class="text-gray-600 text-sm mt-1">Get a comprehensive essay, chat with your research, and explore knowledge graphs.</p>
+                    <!-- Research Ideation -->
+                    <div class="feature-card animate-fade-in" style="animation-delay: 0.3s;">
+                        <div class="icon-circle">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                            </svg>
+                        </div>
+                        <h4 style="font-size: 1.125rem; margin-bottom: 0.75rem;">Research Ideation</h4>
+                        <p style="color: var(--text-muted); font-size: 0.95rem;">
+                            Generate novel research questions and identify gaps in literature.
+                        </p>
                     </div>
                 </div>
             </div>
-        </div>
-    </section>
 
-    <!-- CTA Section -->
-    <section class="py-16 px-4 bg-white">
-        <div class="max-w-3xl mx-auto text-center">
-            <h2 class="text-2xl font-bold text-gray-900 mb-3">Ready to Transform Your Research?</h2>
-            <p class="text-gray-600 mb-6">Join researchers worldwide who are accelerating their work with AURA.</p>
-            <button onclick="openAuthModal('register')" class="px-8 py-3 bg-blue-800 hover:bg-blue-900 text-white rounded-lg text-base font-semibold transition">
-                Create Free Account
-            </button>
+            <!-- How It Works -->
+            <div id="how-it-works" class="mb-16 text-center">
+                <h3 style="font-size: 1.875rem; margin-bottom: 3rem;" class="serif-display">How AURA Works</h3>
+                <div class="steps-container animate-fade-in">
+                    <div class="step-item">
+                        <div class="step-number">1</div>
+                        <div class="step-content text-left">
+                            <h3>Enter Your Query</h3>
+                            <p>Type a research topic or upload an image. AURA understands complex queries.</p>
+                        </div>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-number">2</div>
+                        <div class="step-content text-left">
+                            <h3>AI Analyzes Papers</h3>
+                            <p>Multiple agents analyze academic papers in parallel, extracting key insights.</p>
+                        </div>
+                    </div>
+                    <div class="step-item">
+                        <div class="step-number">3</div>
+                        <div class="step-content text-left">
+                            <h3>Synthesize & Explore</h3>
+                            <p>Get a comprehensive essay, chat with your research, and explore knowledge graphs.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CTA Section -->
+            <div class="text-center mb-12 animate-fade-in">
+                <h3 style="font-size: 1.875rem; margin-bottom: 1rem;" class="serif-display">Ready to Transform Your Research?</h3>
+                <p style="color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 2rem;">
+                    Join researchers worldwide accelerating their work with AURA.
+                </p>
+                <button onclick="openAuthModal('register')" class="btn-primary">Create Free Account</button>
+            </div>
         </div>
-    </section>
+    </main>
 
     <!-- Footer -->
-    <footer class="border-t border-gray-200 py-8 px-4 bg-gray-50">
-        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center">
-            <div class="text-gray-500 text-sm">
+    <footer class="border-t" style="border-color: var(--border-subtle); padding: 2rem; margin-top: 4rem; position: relative; z-index: 10;">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div style="color: var(--text-muted); font-size: 0.9rem;">
                 2025 AURA Research Assistant. Powered by AI.
             </div>
-            <div class="flex gap-6 mt-4 md:mt-0">
-                <a href="#" class="text-gray-500 hover:text-gray-700 transition text-sm">Privacy</a>
-                <a href="#" class="text-gray-500 hover:text-gray-700 transition text-sm">Terms</a>
-                <a href="#" class="text-gray-500 hover:text-gray-700 transition text-sm">Contact</a>
+            <div class="flex gap-6">
+                <a href="#" style="color: var(--text-muted);" class="hover:text-accent-primary transition text-sm">Privacy</a>
+                <a href="#" style="color: var(--text-muted);" class="hover:text-accent-primary transition text-sm">Terms</a>
+                <a href="#" style="color: var(--text-muted);" class="hover:text-accent-primary transition text-sm">Contact</a>
             </div>
         </div>
     </footer>
 
     <!-- Auth Modal -->
-    <div id="authModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50">
-        <div class="bg-white rounded-2xl p-8 w-full max-w-md mx-4 relative shadow-xl">
+    <div id="authModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50" style="display: none;">
+        <div class="glass-panel modal-content rounded-2xl p-8 w-full max-w-md mx-4 relative shadow-xl">
             <!-- Close button -->
-            <button onclick="closeAuthModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <button onclick="closeAuthModal()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg transition" style="color: var(--text-secondary); background: var(--bg-elevated);">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
             </button>
 
             <!-- Tab headers -->
-            <div class="flex mb-6 border-b border-gray-200">
-                <button id="loginTab" onclick="switchTab('login')" class="flex-1 pb-3 text-center font-semibold border-b-2 border-blue-800 text-blue-800">
-                    Sign In
-                </button>
-                <button id="registerTab" onclick="switchTab('register')" class="flex-1 pb-3 text-center font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
-                    Register
-                </button>
+            <div class="tab-header mb-6">
+                <button id="loginTab" onclick="switchTab('login')" class="tab-button active">Sign In</button>
+                <button id="registerTab" onclick="switchTab('register')" class="tab-button">Register</button>
             </div>
 
             <!-- Error message -->
-            <div id="authError" class="hidden mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"></div>
+            <div id="authError" class="hidden mb-4 message-error"></div>
 
             <!-- Success message -->
-            <div id="authSuccess" class="hidden mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm"></div>
+            <div id="authSuccess" class="hidden mb-4 message-success"></div>
 
             <!-- Login Form -->
             <div id="loginContent" class="tab-content active">
                 <form id="loginForm" onsubmit="handleLogin(event)">
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Username or Email</label>
-                        <input type="text" id="loginUsername" required
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 text-gray-900"
-                            placeholder="Enter username or email">
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Username or Email</label>
+                        <input type="text" id="loginUsername" required class="input-field" placeholder="Enter username or email">
                     </div>
                     <div class="mb-6">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                        <input type="password" id="loginPassword" required
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 text-gray-900"
-                            placeholder="Enter password">
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Password</label>
+                        <input type="password" id="loginPassword" required class="input-field" placeholder="Enter password">
                     </div>
-                    <button type="submit" id="loginBtn" class="w-full py-3 bg-blue-800 hover:bg-blue-900 text-white rounded-lg font-semibold transition flex items-center justify-center">
+                    <button type="submit" id="loginBtn" class="btn-primary w-full flex items-center justify-center gap-2">
                         <span id="loginBtnText">Sign In</span>
-                        <div id="loginSpinner" class="spinner ml-2 hidden"></div>
+                        <div id="loginSpinner" class="spinner hidden"></div>
                     </button>
                 </form>
             </div>
@@ -290,50 +651,37 @@
             <div id="registerContent" class="tab-content">
                 <form id="registerForm" onsubmit="handleRegister(event)">
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                        <input type="text" id="registerName"
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 text-gray-900"
-                            placeholder="Your full name">
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Full Name</label>
+                        <input type="text" id="registerName" class="input-field" placeholder="Your full name">
                     </div>
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                        <input type="text" id="registerUsername" required minlength="3"
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 text-gray-900"
-                            placeholder="Choose a username">
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Username</label>
+                        <input type="text" id="registerUsername" required minlength="3" class="input-field" placeholder="Choose a username">
                     </div>
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                        <input type="email" id="registerEmail" required
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 text-gray-900"
-                            placeholder="your@email.com"
-                            oninput="validateEmailField(this)">
-                        <p id="emailError" class="mt-1 text-sm text-red-600 hidden"></p>
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Email</label>
+                        <input type="email" id="registerEmail" required class="input-field" placeholder="your@email.com" oninput="validateEmailField(this)">
+                        <p id="emailError" class="mt-1 text-sm text-red-400 hidden"></p>
                     </div>
                     <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                        <input type="password" id="registerPassword" required minlength="8"
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 text-gray-900"
-                            placeholder="Min 8 chars with uppercase, number, special"
-                            oninput="validatePasswordField(this)">
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Password</label>
+                        <input type="password" id="registerPassword" required minlength="8" class="input-field" placeholder="Min 8 chars with uppercase, number, special" oninput="validatePasswordField(this)">
                         <div id="passwordRequirements" class="mt-2 text-xs space-y-1">
-                            <p id="req-length" class="text-gray-400">&#10060; At least 8 characters</p>
-                            <p id="req-uppercase" class="text-gray-400">&#10060; One uppercase letter</p>
-                            <p id="req-lowercase" class="text-gray-400">&#10060; One lowercase letter</p>
-                            <p id="req-number" class="text-gray-400">&#10060; One number</p>
-                            <p id="req-special" class="text-gray-400">&#10060; One special character (!@#$%^&*)</p>
+                            <p id="req-length" style="color: var(--text-muted);">✕ At least 8 characters</p>
+                            <p id="req-uppercase" style="color: var(--text-muted);">✕ One uppercase letter</p>
+                            <p id="req-lowercase" style="color: var(--text-muted);">✕ One lowercase letter</p>
+                            <p id="req-number" style="color: var(--text-muted);">✕ One number</p>
+                            <p id="req-special" style="color: var(--text-muted);">✕ One special character</p>
                         </div>
                     </div>
                     <div class="mb-6">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
-                        <input type="password" id="registerConfirmPassword" required
-                            class="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-800 focus:ring-1 focus:ring-blue-800 text-gray-900"
-                            placeholder="Confirm your password"
-                            oninput="validateConfirmPassword(this)">
-                        <p id="confirmPasswordError" class="mt-1 text-sm text-red-600 hidden"></p>
+                        <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Confirm Password</label>
+                        <input type="password" id="registerConfirmPassword" required class="input-field" placeholder="Confirm your password" oninput="validateConfirmPassword(this)">
+                        <p id="confirmPasswordError" class="mt-1 text-sm text-red-400 hidden"></p>
                     </div>
-                    <button type="submit" id="registerBtn" class="w-full py-3 bg-blue-800 hover:bg-blue-900 text-white rounded-lg font-semibold transition flex items-center justify-center">
+                    <button type="submit" id="registerBtn" class="btn-primary w-full flex items-center justify-center gap-2">
                         <span id="registerBtnText">Create Account</span>
-                        <div id="registerSpinner" class="spinner ml-2 hidden"></div>
+                        <div id="registerSpinner" class="spinner hidden"></div>
                     </button>
                 </form>
             </div>
@@ -347,7 +695,6 @@
         window.onload = function() {
             const token = localStorage.getItem('aura_access_token');
             if (token) {
-                // Verify token
                 fetch(`${API_URL}/auth/verify`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
@@ -356,33 +703,30 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.valid) {
-                        // Redirect to app
                         window.location.href = '/index.html';
                     } else {
-                        // Clear invalid token
                         localStorage.removeItem('aura_access_token');
                         localStorage.removeItem('aura_refresh_token');
                         localStorage.removeItem('aura_user');
                     }
                 })
                 .catch(() => {
-                    // Token verification failed, stay on landing
+                    // Token verification failed
                 });
             }
+            initializeTheme();
         };
 
         function openAuthModal(tab) {
             const modal = document.getElementById('authModal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
+            modal.style.display = 'flex';
             switchTab(tab);
             hideMessages();
         }
 
         function closeAuthModal() {
             const modal = document.getElementById('authModal');
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
+            modal.style.display = 'none';
             hideMessages();
         }
 
@@ -393,17 +737,13 @@
             const registerContent = document.getElementById('registerContent');
 
             if (tab === 'login') {
-                loginTab.classList.add('border-blue-800', 'text-blue-800');
-                loginTab.classList.remove('border-transparent', 'text-gray-500');
-                registerTab.classList.remove('border-blue-800', 'text-blue-800');
-                registerTab.classList.add('border-transparent', 'text-gray-500');
+                loginTab.classList.add('active');
+                registerTab.classList.remove('active');
                 loginContent.classList.add('active');
                 registerContent.classList.remove('active');
             } else {
-                registerTab.classList.add('border-blue-800', 'text-blue-800');
-                registerTab.classList.remove('border-transparent', 'text-gray-500');
-                loginTab.classList.remove('border-blue-800', 'text-blue-800');
-                loginTab.classList.add('border-transparent', 'text-gray-500');
+                registerTab.classList.add('active');
+                loginTab.classList.remove('active');
                 registerContent.classList.add('active');
                 loginContent.classList.remove('active');
             }
@@ -456,9 +796,7 @@
             try {
                 const response = await fetch(`${API_URL}/auth/login`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         username_or_email: username,
                         password: password
@@ -468,14 +806,11 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    // Store tokens
                     localStorage.setItem('aura_access_token', data.access_token);
                     localStorage.setItem('aura_refresh_token', data.refresh_token);
                     localStorage.setItem('aura_user', JSON.stringify(data.user));
 
                     showSuccess('Login successful! Redirecting...');
-
-                    // Redirect to app
                     setTimeout(() => {
                         window.location.href = '/index.html';
                     }, 1000);
@@ -489,36 +824,32 @@
             }
         }
 
-        // Email validation
         function validateEmailField(input) {
             const email = input.value;
             const errorEl = document.getElementById('emailError');
             const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
             if (email && !emailRegex.test(email)) {
-                input.classList.add('border-red-500');
-                input.classList.remove('border-gray-300', 'border-green-500');
+                input.classList.add('input-invalid');
+                input.classList.remove('input-valid');
                 errorEl.textContent = 'Please enter a valid email address';
                 errorEl.classList.remove('hidden');
                 return false;
             } else if (email) {
-                input.classList.add('border-green-500');
-                input.classList.remove('border-gray-300', 'border-red-500');
+                input.classList.add('input-valid');
+                input.classList.remove('input-invalid');
                 errorEl.classList.add('hidden');
                 return true;
             } else {
-                input.classList.remove('border-red-500', 'border-green-500');
-                input.classList.add('border-gray-300');
+                input.classList.remove('input-invalid', 'input-valid');
                 errorEl.classList.add('hidden');
                 return false;
             }
         }
 
-        // Password validation with real-time feedback
         function validatePasswordField(input) {
             const password = input.value;
 
-            // Check each requirement
             const requirements = {
                 'req-length': password.length >= 8,
                 'req-uppercase': /[A-Z]/.test(password),
@@ -531,30 +862,25 @@
             for (const [id, valid] of Object.entries(requirements)) {
                 const el = document.getElementById(id);
                 if (valid) {
-                    el.classList.remove('text-gray-400', 'text-red-500');
-                    el.classList.add('text-green-600');
-                    el.innerHTML = '&#10004; ' + el.textContent.substring(2);
+                    el.style.color = '#34d399';
+                    el.innerHTML = '✓ ' + el.textContent.substring(2);
                 } else {
-                    el.classList.remove('text-green-600');
-                    el.classList.add('text-gray-400');
-                    el.innerHTML = '&#10060; ' + el.textContent.substring(2);
+                    el.style.color = 'var(--text-muted)';
+                    el.innerHTML = '✕ ' + el.textContent.substring(2);
                     allValid = false;
                 }
             }
 
-            // Update input border color
             if (password && allValid) {
-                input.classList.add('border-green-500');
-                input.classList.remove('border-gray-300', 'border-red-500');
+                input.classList.add('input-valid');
+                input.classList.remove('input-invalid');
             } else if (password) {
-                input.classList.add('border-red-500');
-                input.classList.remove('border-gray-300', 'border-green-500');
+                input.classList.add('input-invalid');
+                input.classList.remove('input-valid');
             } else {
-                input.classList.remove('border-red-500', 'border-green-500');
-                input.classList.add('border-gray-300');
+                input.classList.remove('input-invalid', 'input-valid');
             }
 
-            // Also validate confirm password if it has a value
             const confirmInput = document.getElementById('registerConfirmPassword');
             if (confirmInput.value) {
                 validateConfirmPassword(confirmInput);
@@ -563,32 +889,29 @@
             return allValid;
         }
 
-        // Confirm password validation
         function validateConfirmPassword(input) {
             const confirmPassword = input.value;
             const password = document.getElementById('registerPassword').value;
             const errorEl = document.getElementById('confirmPasswordError');
 
             if (confirmPassword && confirmPassword !== password) {
-                input.classList.add('border-red-500');
-                input.classList.remove('border-gray-300', 'border-green-500');
+                input.classList.add('input-invalid');
+                input.classList.remove('input-valid');
                 errorEl.textContent = 'Passwords do not match';
                 errorEl.classList.remove('hidden');
                 return false;
             } else if (confirmPassword && confirmPassword === password) {
-                input.classList.add('border-green-500');
-                input.classList.remove('border-gray-300', 'border-red-500');
+                input.classList.add('input-valid');
+                input.classList.remove('input-invalid');
                 errorEl.classList.add('hidden');
                 return true;
             } else {
-                input.classList.remove('border-red-500', 'border-green-500');
-                input.classList.add('border-gray-300');
+                input.classList.remove('input-invalid', 'input-valid');
                 errorEl.classList.add('hidden');
                 return false;
             }
         }
 
-        // Validate entire registration form
         function validateRegistrationForm() {
             const email = document.getElementById('registerEmail');
             const password = document.getElementById('registerPassword');
@@ -605,7 +928,6 @@
             event.preventDefault();
             hideMessages();
 
-            // Validate form before submission
             if (!validateRegistrationForm()) {
                 showError('Please fix the validation errors before submitting');
                 return;
@@ -621,9 +943,7 @@
             try {
                 const response = await fetch(`${API_URL}/auth/register`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         username: username,
                         email: email,
@@ -635,14 +955,11 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    // Store tokens
                     localStorage.setItem('aura_access_token', data.access_token);
                     localStorage.setItem('aura_refresh_token', data.refresh_token);
                     localStorage.setItem('aura_user', JSON.stringify(data.user));
 
                     showSuccess('Account created! Redirecting...');
-
-                    // Redirect to app
                     setTimeout(() => {
                         window.location.href = '/index.html';
                     }, 1000);
@@ -656,14 +973,45 @@
             }
         }
 
-        // Close modal on backdrop click
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = !html.hasAttribute('data-theme');
+
+            if (isDark) {
+                html.setAttribute('data-theme', 'light');
+                document.getElementById('sun-icon').classList.add('hidden');
+                document.getElementById('moon-icon').classList.remove('hidden');
+            } else {
+                html.removeAttribute('data-theme');
+                document.getElementById('sun-icon').classList.remove('hidden');
+                document.getElementById('moon-icon').classList.add('hidden');
+            }
+
+            localStorage.setItem('aura-theme', isDark ? 'light' : 'dark');
+        }
+
+        function initializeTheme() {
+            const saved = localStorage.getItem('aura-theme');
+            if (saved === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                document.getElementById('moon-icon').classList.remove('hidden');
+                document.getElementById('sun-icon').classList.add('hidden');
+            }
+        }
+
+        function scrollToSection(id) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
         document.getElementById('authModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeAuthModal();
             }
         });
 
-        // Close modal on escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeAuthModal();

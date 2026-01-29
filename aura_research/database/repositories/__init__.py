@@ -13,6 +13,7 @@ from .chat_repository import ChatRepository
 from .graph_repository import GraphRepository
 from .ideation_repository import IdeationRepository
 from .audit_log_repository import AuditLogRepository
+from .audio_repository import AudioRepository
 
 __all__ = [
     'BaseRepository',
@@ -24,5 +25,6 @@ __all__ = [
     'ChatRepository',
     'GraphRepository',
     'IdeationRepository',
-    'AuditLogRepository'
+    'AuditLogRepository',
+    'AudioRepository'
 ]

@@ -17,16 +17,23 @@ STORAGE_DIR = BASE_DIR / "aura_research" / "storage"
 ESSAYS_DIR = STORAGE_DIR / "essays"
 ANALYSIS_DIR = STORAGE_DIR / "analysis"
 VECTOR_STORE_DIR = STORAGE_DIR / "vector_store"
+AUDIO_DIR = STORAGE_DIR / "audio"
 
 # Create storage directories if they don't exist
 STORAGE_DIR.mkdir(exist_ok=True)
 ESSAYS_DIR.mkdir(exist_ok=True)
 ANALYSIS_DIR.mkdir(exist_ok=True)
 VECTOR_STORE_DIR.mkdir(exist_ok=True)
+AUDIO_DIR.mkdir(exist_ok=True)
 
 # API Keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+
+# ElevenLabs Configuration
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1"
+ELEVENLABS_DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
 
 # Database Configuration
 DB_SERVER = os.getenv("DB_SERVER", "LAPTOP-FO95TROJ")
@@ -53,7 +60,8 @@ def get_storage_paths():
         "storage": str(STORAGE_DIR),
         "essays": str(ESSAYS_DIR),
         "analysis": str(ANALYSIS_DIR),
-        "vector_store": str(VECTOR_STORE_DIR)
+        "vector_store": str(VECTOR_STORE_DIR),
+        "audio": str(AUDIO_DIR)
     }
 
 def validate_env_vars():
@@ -62,4 +70,6 @@ def validate_env_vars():
         raise ValueError("OPENAI_API_KEY not found in environment variables")
     if not SERPER_API_KEY:
         raise ValueError("SERPER_API_KEY not found in environment variables")
+    if not ELEVENLABS_API_KEY:
+        raise ValueError("ELEVENLABS_API_KEY not found in environment variables")
     return True

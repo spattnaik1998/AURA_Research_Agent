@@ -4,1067 +4,1101 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AURA - Autonomous Unified Research Assistant</title>
-    <link href="output.css" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        /* CSS Variables for Theming */
         :root {
-            /* Light Theme (Default) */
-            --bg-primary: #FAFAFA;
-            --bg-secondary: #ffffff;
-            --bg-tertiary: #F5F5F5;
-            --text-primary: #111827;
-            --text-secondary: #6B7280;
-            --text-tertiary: #9ca3af;
-            --border-color: #E5E7EB;
-            --border-color-dark: #d1d5db;
-
-            /* Card backgrounds */
-            --card-bg: #ffffff;
-            --card-hover: #f9fafb;
-
-            /* Status colors */
-            --success-bg: #f0fdf4;
-            --success-border: #bbf7d0;
-            --success-text: #166534;
-            --error-bg: #fef2f2;
-            --error-border: #fecaca;
-            --error-text: #991b1b;
-            --info-bg: #DBEAFE;
-            --info-border: #93C5FD;
-            --info-text: #1E40AF;
-
-            /* Accent color - Deep Blue */
-            --accent-primary: #1E40AF;
-            --accent-hover: #1E3A8A;
-            --accent-light: #DBEAFE;
-            --accent-medium: #3B82F6;
-
-            /* Header */
-            --header-bg: rgba(255, 255, 255, 0.95);
-            --header-border: #E5E7EB;
-
-            /* Shadow colors */
-            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
-            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+            /* Dark theme - sophisticated navy and slate */
+            --bg-void: #0f1117;
+            --bg-deep: #151b28;
+            --bg-surface: #1a2332;
+            --bg-elevated: #232f42;
+            --bg-hover: #2d3a50;
+            --border-subtle: rgba(255,255,255,0.05);
+            --border-medium: rgba(255,255,255,0.08);
+            --border-accent: rgba(251,191,36,0.2);
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+            --accent-primary: #fbbf24;
+            --accent-secondary: #f59e0b;
+            --accent-tertiary: #6366f1;
+            --success: #34d399;
+            --error: #f87171;
+            --gradient-main: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            --gradient-accent: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
         }
 
-        /* Dark Theme */
-        [data-theme="dark"] {
-            --bg-primary: #111827;
-            --bg-secondary: #1F2937;
-            --bg-tertiary: #374151;
-            --text-primary: #F9FAFB;
-            --text-secondary: #E5E7EB;
-            --text-tertiary: #D1D5DB;
-            --border-color: #374151;
-            --border-color-dark: #4B5563;
-
-            /* Card backgrounds */
-            --card-bg: #1F2937;
-            --card-hover: #374151;
-
-            /* Status colors (darker variants) */
-            --success-bg: #064E3B;
-            --success-border: #10B981;
-            --success-text: #ECFDF5;
-            --error-bg: #7F1D1D;
-            --error-border: #EF4444;
-            --error-text: #FEF2F2;
-            --info-bg: #1E3A5F;
-            --info-border: #3B82F6;
-            --info-text: #DBEAFE;
-
-            /* Accent color - Deep Blue (visible in dark mode) */
-            --accent-primary: #3B82F6;
-            --accent-hover: #2563EB;
-            --accent-light: #1E3A5F;
-            --accent-medium: #60A5FA;
-
-            /* Header */
-            --header-bg: rgba(17, 24, 39, 0.95);
-            --header-border: #374151;
-
-            /* Shadow colors */
-            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
-            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+        [data-theme="light"] {
+            --bg-void: #fafbfc;
+            --bg-deep: #f5f7fb;
+            --bg-surface: #ffffff;
+            --bg-elevated: #f8f9fb;
+            --bg-hover: #f1f3f5;
+            --border-subtle: rgba(51,65,85,0.06);
+            --border-medium: rgba(51,65,85,0.1);
+            --border-accent: rgba(251,191,36,0.15);
+            --text-primary: #0f1117;
+            --text-secondary: #334155;
+            --text-muted: #64748b;
+            --accent-primary: #d97706;
+            --accent-secondary: #f59e0b;
+            --accent-tertiary: #4f46e5;
+            --success: #22c55e;
+            --error: #ef4444;
         }
 
-        body {
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            padding: 0;
             font-family: 'Inter', sans-serif;
-            background-color: var(--bg-primary);
+            background: var(--bg-void);
             color: var(--text-primary);
-            transition: background-color 0.2s ease, color 0.2s ease;
+            transition: background 0.3s ease, color 0.3s ease;
+            line-height: 1.5;
         }
 
-        /* Thinking Animation - Simplified */
+        /* Enhanced animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 100% 60% at 50% -10%, rgba(251,191,36,0.08), transparent),
+                radial-gradient(ellipse 80% 50% at 80% 80%, rgba(99,102,241,0.06), transparent),
+                radial-gradient(ellipse 60% 40% at 20% 50%, rgba(139,92,246,0.04), transparent);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Typography */
+        .serif-display {
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .mono { font-family: 'IBM Plex Mono', monospace; }
+
+        h1, h2, h3 {
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        /* Glass morphism panels - refined */
+        .glass-panel {
+            background: rgba(26, 35, 50, 0.4);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        [data-theme="light"] .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+        }
+
+        .glass-panel-elevated {
+            background: rgba(35, 47, 66, 0.6);
+            border: 1px solid var(--border-medium);
+            border-radius: 12px;
+            backdrop-filter: blur(16px);
+        }
+
+        [data-theme="light"] .glass-panel-elevated {
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Accent borders */
+        .accent-border {
+            border-top: 3px solid var(--accent-primary);
+        }
+
+        /* Header - Premium and clean */
+        .header-premium {
+            background: rgba(15, 17, 23, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        [data-theme="light"] .header-premium {
+            background: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Navigation */
+        .nav-tab {
+            position: relative;
+            padding: 0.875rem 1.5rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 0.9rem;
+            letter-spacing: 0.01em;
+            transition: all 0.2s ease;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            background: none;
+            border: none;
+            text-decoration: none;
+        }
+
+        .nav-tab:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-tab.active {
+            color: var(--accent-primary);
+            border-bottom-color: var(--accent-primary);
+        }
+
+        /* Buttons - Enhanced */
+        .btn-primary {
+            background: var(--gradient-main);
+            color: #0f1117;
+            padding: 0.875rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.01em;
+            transition: all 0.2s ease;
+            border: none;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(251, 191, 36, 0.25);
+        }
+
+        .btn-secondary {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            padding: 0.875rem 2rem;
+            border-radius: 8px;
+            font-weight: 500;
+            border: 1px solid var(--border-medium);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-primary);
+        }
+
+        /* Input fields */
+        .input-field {
+            width: 100%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-medium);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.1);
+            background: var(--bg-elevated);
+        }
+
+        .input-field::placeholder { color: var(--text-muted); }
+
+        /* Feature card - Hero section */
+        .feature-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card:hover {
+            border-color: var(--border-accent);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(251, 191, 36, 0.1);
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        /* Icon containers */
+        .icon-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(251, 191, 36, 0.1);
+            color: var(--accent-primary);
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Status card */
+        .status-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .status-card:hover {
+            border-color: var(--border-medium);
+        }
+
+        /* Mode toggle pills */
+        .mode-toggle {
+            display: inline-flex;
+            background: var(--bg-elevated);
+            border-radius: 8px;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .mode-btn {
+            padding: 0.5rem 1.25rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+        }
+
+        .mode-btn.active {
+            background: var(--accent-primary);
+            color: #0f1117;
+            font-weight: 600;
+        }
+
+        /* Progress steps */
+        .progress-step {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.25rem;
+            border-radius: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            transition: all 0.3s ease;
+        }
+
+        .progress-step.active {
+            border-color: var(--accent-primary);
+            background: rgba(251, 191, 36, 0.05);
+        }
+
+        .step-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.9rem;
+            background: var(--bg-elevated);
+            color: var(--text-muted);
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .progress-step.active .step-number {
+            background: var(--accent-primary);
+            color: #0f1117;
+            box-shadow: 0 0 16px rgba(251, 191, 36, 0.4);
+        }
+
+        /* Stat cards */
+        .stat-card {
+            text-align: center;
+            padding: 1.5rem;
+            border-radius: 10px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            transition: all 0.2s ease;
+        }
+
+        .stat-value {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--accent-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Chat styles */
+        .chat-container {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 1.5rem;
+            flex: 1;
+        }
+
+        .chat-message {
+            margin-bottom: 1rem;
+            padding: 1rem 1.25rem;
+            border-radius: 10px;
+            max-width: 85%;
+        }
+
+        .chat-message.user {
+            background: var(--accent-primary);
+            color: #0f1117;
+            margin-left: auto;
+            font-weight: 500;
+        }
+
+        .chat-message.assistant {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+        }
+
+        /* Theme toggle */
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-medium);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--accent-primary);
+            color: var(--accent-primary);
+        }
+
+        /* Connection pill */
+        .connection-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+
+        .status-dot.connected {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        /* Upload zone */
+        .upload-zone {
+            border: 2px dashed var(--border-medium);
+            border-radius: 10px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: rgba(251, 191, 36, 0.02);
+        }
+
+        .upload-zone:hover {
+            border-color: var(--accent-primary);
+            background: rgba(251, 191, 36, 0.05);
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes shimmer {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .animate-fade-in { animation: fadeInUp 0.5s ease-out; }
+        .animate-slide-in { animation: slideInRight 0.5s ease-out; }
+        .stagger-delay-100 { animation-delay: 0.1s; }
+        .stagger-delay-200 { animation-delay: 0.2s; }
+        .stagger-delay-300 { animation-delay: 0.3s; }
+
+        /* Thinking indicator */
         .thinking-indicator {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            padding: 1.5rem;
+            padding: 2rem;
             gap: 1rem;
         }
 
-        /* Simple spinner system */
         .orbital-system {
             position: relative;
-            width: 80px;
-            height: 80px;
+            width: 60px;
+            height: 60px;
         }
 
         .orbit {
             position: absolute;
-            border: 2px solid;
+            border: 2px solid transparent;
             border-radius: 50%;
-            animation: rotate 2s linear infinite;
+            animation: spin 2s linear infinite;
         }
 
         .orbit-1 {
-            width: 80px;
-            height: 80px;
-            border-color: var(--accent-light);
+            inset: 0;
             border-top-color: var(--accent-primary);
         }
 
         .orbit-2 {
-            width: 56px;
-            height: 56px;
-            border-color: var(--accent-light);
-            border-top-color: var(--accent-medium);
+            inset: 8px;
+            border-top-color: var(--accent-secondary);
             animation-direction: reverse;
             animation-duration: 1.5s;
-            top: 12px;
-            left: 12px;
         }
 
         .orbit-3 {
-            width: 32px;
-            height: 32px;
-            border-color: var(--accent-light);
+            inset: 16px;
             border-top-color: var(--accent-primary);
             animation-duration: 1s;
-            top: 24px;
-            left: 24px;
         }
 
-        /* Hide planets - use simple spinner instead */
-        .planet, .core {
-            display: none;
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
 
-        /* Pulsing dots beneath */
         .thinking-dots {
             display: flex;
-            gap: 0.5rem;
-            align-items: center;
+            gap: 6px;
         }
 
         .dot {
-            width: 8px;
-            height: 8px;
+            width: 6px;
+            height: 6px;
             border-radius: 50%;
             background: var(--accent-primary);
             animation: bounce-dot 1.4s ease-in-out infinite;
         }
 
-        .dot:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-
-        .dot:nth-child(3) {
-            animation-delay: 0.4s;
-        }
-
-        /* Thinking text */
-        .thinking-text {
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        /* Keyframe Animations */
-        @keyframes rotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
 
         @keyframes bounce-dot {
             0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-8px); }
+            50% { transform: translateY(-6px); }
         }
 
-        /* Fade in animation for thinking indicator */
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        /* Tab content */
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeInUp 0.3s ease; }
+
+        /* Graph container */
+        .graph-container {
+            background: var(--bg-surface);
+            border-radius: 10px;
+            border: 1px solid var(--border-subtle);
+            min-height: 600px;
         }
 
-        .thinking-indicator {
-            animation: fadeInUp 0.3s ease-out;
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-medium);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* Hero section */
+        .hero-section {
+            text-align: center;
+            padding: 4rem 2rem;
+            margin-bottom: 4rem;
         }
 
-        /* Graph Visualization Styles */
-        .graph-svg {
-            background: var(--bg-tertiary);
-            border-radius: 0.5rem;
+        .hero-title {
+            font-size: 3.5rem;
+            line-height: 1.1;
+            margin-bottom: 1rem;
+            font-weight: 700;
         }
 
-        .graph-node circle {
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .graph-node:hover circle {
-            stroke-width: 3px;
-            filter: brightness(1.2);
-        }
-
-        .graph-node text {
-            pointer-events: none;
-            user-select: none;
-            font-family: 'Inter', sans-serif;
-        }
-
-        .graph-edge {
-            transition: stroke-opacity 0.3s ease;
-        }
-
-        .graph-edge:hover {
-            stroke-opacity: 1 !important;
-            stroke-width: 3px !important;
-        }
-
-        /* Input Mode Toggle Buttons */
-        .input-mode-btn {
+        .hero-subtitle {
+            font-size: 1.25rem;
             color: var(--text-secondary);
-            background-color: transparent;
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
-        .input-mode-btn.active {
-            color: #ffffff;
-            background: var(--accent-primary);
+        /* Feature grid */
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
         }
 
-        .input-mode-btn:hover:not(.active) {
-            color: var(--text-primary);
-            background-color: var(--bg-tertiary);
-        }
+        /* Hide class */
+        .hidden { display: none !important; }
 
-        /* Themed Components */
-        .themed-bg {
-            background-color: var(--bg-secondary);
-        }
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2.25rem;
+            }
 
-        .themed-card {
-            background-color: var(--card-bg);
-            border-color: var(--border-color);
-        }
+            .hero-subtitle {
+                font-size: 1rem;
+            }
 
-        .themed-text {
-            color: var(--text-primary);
-        }
-
-        .themed-text-secondary {
-            color: var(--text-secondary);
-        }
-
-        .themed-border {
-            border-color: var(--border-color);
-        }
-
-        .glass-effect {
-            background-color: var(--header-bg) !important;
-            border-bottom: 1px solid var(--header-border);
-        }
-
-        /* Status Card Themed */
-        .status-card {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .status-card:hover {
-            box-shadow: var(--shadow-md);
-        }
-
-        /* Input Field Themed */
-        .input-field {
-            background-color: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-        }
-
-        .input-field:focus {
-            border-color: var(--accent-primary);
-            outline: none;
-            box-shadow: 0 0 0 2px var(--accent-light);
-        }
-
-        .input-field::placeholder {
-            color: var(--text-tertiary);
-        }
-
-        /* Dark Mode Toggle Button */
-        .theme-toggle {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: var(--accent-primary);
-            border: none;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-        }
-
-        .theme-toggle:hover {
-            background: var(--accent-hover);
-            transform: scale(1.05);
-        }
-
-        .theme-toggle svg {
-            width: 20px;
-            height: 20px;
-            color: white;
-        }
-
-        /* Chat messages themed */
-        .chat-message {
-            border-radius: 0.75rem;
-            padding: 1rem;
-        }
-
-        .chat-message.user {
-            background-color: var(--accent-light);
-            border-left: 3px solid var(--accent-primary);
-        }
-
-        .chat-message.assistant {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-        }
-
-        /* Update image upload area for dark mode */
-        #image-upload-area {
-            background-color: var(--bg-secondary);
-            border-color: var(--border-color);
-        }
-
-        #image-upload-area:hover {
-            border-color: var(--accent-primary);
-            background-color: var(--accent-light);
-        }
-
-        /* Tab buttons themed */
-        .tab-button {
-            background-color: transparent;
-            color: var(--text-secondary);
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s ease;
-        }
-
-        .tab-button.active {
-            color: var(--accent-primary);
-            border-bottom-color: var(--accent-primary);
-            background-color: var(--card-bg);
-        }
-
-        .tab-button:hover:not(.active) {
-            color: var(--text-primary);
-            background-color: var(--bg-tertiary);
-        }
-
-        /* Additional themed elements */
-        [data-theme="dark"] .bg-white {
-            background-color: var(--card-bg) !important;
-        }
-
-        [data-theme="dark"] .bg-gray-50 {
-            background-color: var(--bg-tertiary) !important;
-        }
-
-        [data-theme="dark"] .bg-gray-100 {
-            background-color: var(--bg-tertiary) !important;
-        }
-
-        [data-theme="dark"] .text-gray-500 {
-            color: #e2e8f0 !important;
-        }
-
-        [data-theme="dark"] .text-gray-600 {
-            color: #f1f5f9 !important;
-        }
-
-        [data-theme="dark"] .text-gray-700 {
-            color: #ffffff !important;
-        }
-
-        [data-theme="dark"] .text-gray-800 {
-            color: #ffffff !important;
-        }
-
-        [data-theme="dark"] .text-gray-900 {
-            color: #ffffff !important;
-        }
-
-        [data-theme="dark"] .border-gray-100 {
-            border-color: var(--border-color) !important;
-        }
-
-        [data-theme="dark"] .border-gray-200 {
-            border-color: var(--border-color) !important;
-        }
-
-        [data-theme="dark"] .border-gray-300 {
-            border-color: var(--border-color-dark) !important;
-        }
-
-        /* Success/Error/Info themed for dark mode */
-        [data-theme="dark"] .bg-green-50 {
-            background-color: var(--success-bg) !important;
-        }
-
-        [data-theme="dark"] .border-green-200,
-        [data-theme="dark"] .border-green-300 {
-            border-color: var(--success-border) !important;
-        }
-
-        [data-theme="dark"] .text-green-700,
-        [data-theme="dark"] .text-green-600,
-        [data-theme="dark"] .text-green-800 {
-            color: #ffffff !important;
-        }
-
-        [data-theme="dark"] .bg-red-50 {
-            background-color: var(--error-bg) !important;
-        }
-
-        [data-theme="dark"] .border-red-200 {
-            border-color: var(--error-border) !important;
-        }
-
-        [data-theme="dark"] .text-red-600,
-        [data-theme="dark"] .text-red-700,
-        [data-theme="dark"] .text-red-800 {
-            color: #ffffff !important;
-        }
-
-        [data-theme="dark"] .bg-blue-50 {
-            background-color: var(--info-bg) !important;
-        }
-
-        [data-theme="dark"] .border-blue-200 {
-            border-color: var(--info-border) !important;
-        }
-
-        [data-theme="dark"] .text-blue-600,
-        [data-theme="dark"] .text-blue-700,
-        [data-theme="dark"] .text-blue-800 {
-            color: #ffffff !important;
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
-<body class="min-h-screen antialiased">
-    <!-- Header -->
-    <header class="glass-effect sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+<body>
+    <!-- Header - Premium Navigation -->
+    <header class="header-premium">
+        <div class="max-w-7xl mx-auto px-6 py-4">
             <div class="flex items-center justify-between">
-                <div class="flex items-center space-x-3">
-                    <!-- Logo Icon -->
-                    <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: var(--accent-primary);">
-                        <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background: var(--gradient-main);">
+                        <svg class="w-5 h-5 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                         </svg>
                     </div>
-                    <div>
-                        <h1 class="text-2xl font-bold" style="color: var(--accent-primary);">AURA</h1>
-                        <p class="text-xs themed-text-secondary font-medium">Autonomous Unified Research Assistant</p>
-                    </div>
+                    <h1 class="serif-display text-xl" style="color: var(--text-primary);">AURA</h1>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <!-- Dark Mode Toggle -->
-                    <button
-                        id="theme-toggle"
-                        onclick="toggleTheme()"
-                        class="theme-toggle"
-                        title="Toggle dark mode"
-                    >
-                        <!-- Sun Icon (shown in dark mode) -->
-                        <svg id="sun-icon" class="hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+                <!-- Right controls -->
+                <div id="header-controls" class="flex items-center gap-3">
+                    <button id="theme-toggle" onclick="toggleTheme()" class="theme-toggle" title="Toggle theme">
+                        <svg id="sun-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
                         </svg>
-                        <!-- Moon Icon (shown in light mode) -->
-                        <svg id="moon-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg id="moon-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
                         </svg>
                     </button>
 
-                    <!-- Connection Status -->
-                    <div id="connection-status" class="flex items-center space-x-3 px-4 py-2 rounded-full bg-gray-100 shadow-sm">
-                        <div class="relative flex items-center justify-center">
-                            <div class="w-3 h-3 rounded-full bg-gray-400"></div>
-                        </div>
-                        <span class="text-sm font-semibold text-gray-600">Connecting...</span>
+                    <div id="connection-status" class="connection-pill">
+                        <span class="status-dot"></span>
+                        <span style="color: var(--text-secondary);">Connecting...</span>
                     </div>
                 </div>
             </div>
         </div>
     </header>
 
-    <!-- Main Container -->
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
-        <!-- Tab Navigation -->
-        <div class="rounded-2xl mb-8 overflow-hidden border" style="background-color: var(--card-bg); border-color: var(--border-color); box-shadow: var(--shadow-sm);">
-            <div class="border-b" style="border-color: var(--border-color); background-color: var(--bg-tertiary);">
-                <nav class="flex space-x-1 px-4">
-                    <button onclick="switchTab('research')" id="tab-research" class="tab-button active">
-                        <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        Research Panel
-                    </button>
-                    <button onclick="switchTab('chatbot')" id="tab-chatbot" class="tab-button">
-                        <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
-                        </svg>
-                        RAG Chatbot
-                    </button>
-                    <button onclick="switchTab('graph')" id="tab-graph" class="tab-button">
-                        <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"></path>
-                        </svg>
-                        Knowledge Graph
-                    </button>
-                    <button onclick="switchTab('questions')" id="tab-questions" class="tab-button">
-                        <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
-                        </svg>
-                        Question Generator
-                    </button>
-                </nav>
+    <!-- Main Content -->
+    <main class="relative z-10">
+        <!-- Hero Section -->
+        <div class="max-w-6xl mx-auto px-6">
+            <div class="hero-section animate-fade-in">
+                <h2 class="hero-title serif-display">
+                    Intelligent Research
+                    <span style="background: var(--gradient-main); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Accelerated</span>
+                </h2>
+                <p class="hero-subtitle">
+                    AURA is an autonomous research intelligence platform that combines multi-agent analysis, RAG-powered insights, and knowledge graph visualization to transform how you explore academic research.
+                </p>
+                <div class="flex gap-3 justify-center">
+                    <button onclick="switchTab('research')" class="btn-primary">Begin Research</button>
+                    <button onclick="scrollToFeatures()" class="btn-secondary">Learn More</button>
+                </div>
             </div>
 
-            <!-- Research Panel Tab -->
-            <div id="panel-research" class="tab-content p-8">
-                <div class="space-y-8">
-                    <!-- Query Input Section -->
-                    <div class="status-card group hover:shadow-glow">
-                        <div class="flex items-center justify-between mb-6">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center">
-                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                                    </svg>
-                                </div>
-                                <h2 class="text-2xl font-bold text-gray-900">Start Research</h2>
-                            </div>
+            <!-- Feature Showcase Grid -->
+            <div id="features-section" class="mb-12">
+                <h3 style="font-size: 1.875rem; margin-bottom: 3rem; text-align: center;" class="serif-display">Powerful Capabilities</h3>
 
-                            <!-- Input Mode Toggle -->
-                            <div class="flex items-center bg-gray-100 rounded-lg p-1">
-                                <button
-                                    id="text-mode-btn"
-                                    onclick="switchInputMode('text')"
-                                    class="input-mode-btn active px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 flex items-center space-x-2"
-                                >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="feature-grid animate-fade-in">
+                    <!-- Research Card -->
+                    <div class="feature-card stagger-delay-100 animate-fade-in">
+                        <div class="icon-circle">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <h4 style="font-size: 1.125rem; margin-bottom: 0.75rem;">Multi-Agent Research</h4>
+                        <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.6;">
+                            Autonomous agents collaboratively fetch, analyze, and synthesize academic papers across domains.
+                        </p>
+                        <button onclick="switchTab('research')" class="mt-4 text-sm font-medium" style="color: var(--accent-primary); cursor: pointer; background: none; border: none;">
+                            Explore →
+                        </button>
+                    </div>
+
+                    <!-- RAG Chat Card -->
+                    <div class="feature-card stagger-delay-200 animate-fade-in">
+                        <div class="icon-circle">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                            </svg>
+                        </div>
+                        <h4 style="font-size: 1.125rem; margin-bottom: 0.75rem;">RAG Chatbot</h4>
+                        <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.6;">
+                            Ask intelligent questions about your research. Powered by retrieval-augmented generation and vector search.
+                        </p>
+                        <button onclick="switchTab('chatbot')" class="mt-4 text-sm font-medium" style="color: var(--accent-primary); cursor: pointer; background: none; border: none;">
+                            Chat Now →
+                        </button>
+                    </div>
+
+                    <!-- Knowledge Graph Card -->
+                    <div class="feature-card stagger-delay-300 animate-fade-in">
+                        <div class="icon-circle">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                            </svg>
+                        </div>
+                        <h4 style="font-size: 1.125rem; margin-bottom: 0.75rem;">Knowledge Graph</h4>
+                        <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.6;">
+                            Visualize relationships between concepts, authors, methods, and papers in an interactive graph.
+                        </p>
+                        <button onclick="switchTab('graph')" class="mt-4 text-sm font-medium" style="color: var(--accent-primary); cursor: pointer; background: none; border: none;">
+                            Visualize →
+                        </button>
+                    </div>
+
+                    <!-- Ideation Card -->
+                    <div class="feature-card stagger-delay-100 animate-fade-in">
+                        <div class="icon-circle">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                            </svg>
+                        </div>
+                        <h4 style="font-size: 1.125rem; margin-bottom: 0.75rem;">Research Ideation</h4>
+                        <p style="color: var(--text-muted); font-size: 0.95rem; line-height: 1.6;">
+                            AI-powered research question generator that identifies gaps and reveals new research directions.
+                        </p>
+                        <button onclick="switchTab('questions')" class="mt-4 text-sm font-medium" style="color: var(--accent-primary); cursor: pointer; background: none; border: none;">
+                            Explore Ideas →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs & Content -->
+        <div class="glass-panel mx-6 mt-8" style="max-width: calc(100% - 3rem); margin-left: auto; margin-right: auto;">
+            <nav class="flex border-b" style="border-color: var(--border-subtle);">
+                <button onclick="switchTab('research')" id="tab-research" class="nav-tab active">
+                    <svg class="w-4 h-4 inline-block mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                    </svg>
+                    Research
+                </button>
+                <button onclick="switchTab('chatbot')" id="tab-chatbot" class="nav-tab">
+                    <svg class="w-4 h-4 inline-block mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                    </svg>
+                    RAG Chat
+                </button>
+                <button onclick="switchTab('graph')" id="tab-graph" class="nav-tab">
+                    <svg class="w-4 h-4 inline-block mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path>
+                    </svg>
+                    Knowledge Graph
+                </button>
+                <button onclick="switchTab('questions')" id="tab-questions" class="nav-tab">
+                    <svg class="w-4 h-4 inline-block mr-2 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+                    </svg>
+                    Ideation
+                </button>
+            </nav>
+
+            <!-- Research Panel -->
+            <div id="panel-research" class="tab-content active p-8">
+                <div class="max-w-3xl mx-auto space-y-8">
+                    <div class="text-center mb-10">
+                        <h2 style="font-size: 2rem; margin-bottom: 1rem;" class="serif-display">Begin Your Research</h2>
+                        <p style="color: var(--text-secondary);">Enter a topic and let our multi-agent system analyze the academic landscape</p>
+                    </div>
+
+                    <div class="status-card accent-border">
+                        <div class="flex items-center justify-between mb-6">
+                            <span class="text-sm font-medium" style="color: var(--text-secondary);">Input Method</span>
+                            <div class="mode-toggle">
+                                <button id="text-mode-btn" onclick="switchInputMode('text')" class="mode-btn active">
+                                    <svg class="w-4 h-4 inline mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                                     </svg>
-                                    <span>Text</span>
+                                    Text
                                 </button>
-                                <button
-                                    id="image-mode-btn"
-                                    onclick="switchInputMode('image')"
-                                    class="input-mode-btn px-4 py-2 rounded-md text-sm font-semibold transition-all duration-200 flex items-center space-x-2"
-                                >
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <button id="image-mode-btn" onclick="switchInputMode('image')" class="mode-btn">
+                                    <svg class="w-4 h-4 inline mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
                                     </svg>
-                                    <span>Image</span>
+                                    Image
                                 </button>
                             </div>
                         </div>
 
-                        <div class="space-y-5">
-                            <!-- Text Input Mode -->
-                            <div id="text-input-section">
-                                <label for="research-query" class="block text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                                    <svg class="w-4 h-4 mr-2 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
-                                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path>
-                                        <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"></path>
-                                    </svg>
-                                    Research Query
-                                </label>
-                                <input
-                                    type="text"
-                                    id="research-query"
-                                    class="input-field"
-                                    placeholder="e.g., machine learning in healthcare, quantum computing applications..."
-                                >
-                            </div>
-
-                            <!-- Image Input Mode -->
-                            <div id="image-input-section" class="hidden">
-                                <label class="block text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                                    <svg class="w-4 h-4 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                    </svg>
-                                    Upload Research Image
-                                </label>
-
-                                <!-- Image Upload Area -->
-                                <div class="relative">
-                                    <input
-                                        type="file"
-                                        id="research-image"
-                                        accept=".png,.jpg,.jpeg"
-                                        class="hidden"
-                                        onchange="handleImageUpload(event)"
-                                    >
-                                    <label
-                                        for="research-image"
-                                        id="image-upload-area"
-                                        class="block border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-all duration-200"
-                                    >
-                                        <div class="space-y-3">
-                                            <div class="flex justify-center">
-                                                <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <p class="text-sm font-semibold text-gray-700">Click to upload or drag and drop</p>
-                                                <p class="text-xs text-gray-500 mt-1">PNG or JPEG (Max 10MB)</p>
-                                            </div>
-                                        </div>
-                                    </label>
-                                </div>
-
-                                <!-- Image Preview -->
-                                <div id="image-preview-section" class="hidden mt-4">
-                                    <div class="relative bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                        <button
-                                            onclick="clearImageUpload()"
-                                            class="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors z-10"
-                                        >
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                            </svg>
-                                        </button>
-                                        <img id="image-preview" src="" alt="Uploaded image" class="w-full h-64 object-contain rounded">
-                                        <p id="image-filename" class="text-sm text-gray-600 mt-2 text-center font-medium"></p>
-                                    </div>
-
-                                    <!-- Extracted Query Display -->
-                                    <div id="extracted-query-section" class="hidden mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                                        <p class="text-xs font-semibold text-blue-700 mb-2 flex items-center">
-                                            <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
-                                            </svg>
-                                            Extracted Research Query:
-                                        </p>
-                                        <p id="extracted-query-text" class="text-sm text-gray-800 font-medium"></p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button
-                                onclick="startResearch()"
-                                id="start-research-btn"
-                                class="btn-primary w-full group relative overflow-hidden"
-                            >
-                                <span class="relative z-10 flex items-center justify-center">
-                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-                                    </svg>
-                                    Start Research
-                                </span>
-                            </button>
+                        <div id="text-input-section">
+                            <label class="block text-sm font-medium mb-3" style="color: var(--text-secondary);">Research Query</label>
+                            <input type="text" id="research-query" class="input-field" placeholder="e.g., machine learning in healthcare, quantum computing applications...">
                         </div>
-                    </div>
 
-                    <!-- Status Tracker -->
-                    <div id="status-tracker" class="status-card hidden animate-slide-up">
-                        <div class="flex items-center space-x-3 mb-6">
-                            <div class="w-10 h-10 bg-gradient-to-br from-accent-500 to-accent-600 rounded-xl flex items-center justify-center">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        <div id="image-input-section" class="hidden">
+                            <input type="file" id="research-image" accept=".png,.jpg,.jpeg" class="hidden" onchange="handleImageUpload(event)">
+                            <label for="research-image" id="image-upload-area" class="upload-zone block">
+                                <svg class="w-12 h-12 mx-auto mb-3" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
                                 </svg>
-                            </div>
-                            <h2 class="text-2xl font-bold text-gray-900">Research Progress</h2>
-                        </div>
-                        <div class="space-y-6">
-                            <!-- Session Info -->
-                            <div class="flex items-center justify-between p-4 bg-gradient-to-r from-primary-50 to-accent-50 rounded-xl border border-primary-200">
-                                <span class="text-sm font-semibold text-gray-700 flex items-center">
-                                    <svg class="w-4 h-4 mr-2 text-primary-600" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"></path>
-                                    </svg>
-                                    Session ID:
-                                </span>
-                                <span id="session-id" class="text-sm text-primary-700 font-mono font-bold"></span>
-                            </div>
+                                <p class="font-medium" style="color: var(--text-secondary);">Click to upload or drag and drop</p>
+                                <p class="text-sm mt-1" style="color: var(--text-muted);">PNG or JPEG (Max 10MB)</p>
+                            </label>
 
-                            <!-- Progress Steps -->
-                            <div class="space-y-4">
-                                <div id="step-fetching" class="progress-step p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-all">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="relative w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center shadow-sm">
-                                            <span class="text-lg font-bold text-gray-600">1</span>
-                                        </div>
-                                        <div class="flex-1">
-                                            <p class="text-base font-semibold text-gray-800">Fetching Papers</p>
-                                            <p class="text-sm text-gray-600">Searching academic databases...</p>
-                                        </div>
-                                    </div>
+                            <div id="image-preview-section" class="hidden mt-4">
+                                <div class="relative glass-panel-elevated p-4">
+                                    <button onclick="clearImageUpload()" class="absolute top-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center" style="background: var(--error); color: white;">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                        </svg>
+                                    </button>
+                                    <img id="image-preview" src="" alt="Preview" class="w-full h-48 object-contain rounded-lg">
+                                    <p id="image-filename" class="text-sm text-center mt-2 mono" style="color: var(--text-muted);"></p>
                                 </div>
-
-                                <div id="step-analyzing" class="progress-step p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-all">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="relative w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center shadow-sm">
-                                            <span class="text-lg font-bold text-gray-600">2</span>
-                                        </div>
-                                        <div class="flex-1">
-                                            <p class="text-base font-semibold text-gray-800">Analyzing Papers</p>
-                                            <p class="text-sm text-gray-600">Processing with multi-agent system...</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div id="step-synthesizing" class="progress-step p-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-all">
-                                    <div class="flex items-center space-x-4">
-                                        <div class="relative w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center shadow-sm">
-                                            <span class="text-lg font-bold text-gray-600">3</span>
-                                        </div>
-                                        <div class="flex-1">
-                                            <p class="text-base font-semibold text-gray-800">Synthesizing Essay</p>
-                                            <p class="text-sm text-gray-600">Generating comprehensive report...</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Statistics -->
-                            <div id="research-stats" class="grid grid-cols-3 gap-6 pt-6 border-t-2 border-gray-200">
-                                <div class="text-center p-4 rounded-xl bg-gradient-to-br from-primary-50 to-primary-100 border border-primary-200">
-                                    <div class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-primary-700" id="papers-count">0</div>
-                                    <p class="text-xs font-semibold text-gray-700 mt-2">Papers Analyzed</p>
-                                </div>
-                                <div class="text-center p-4 rounded-xl bg-gradient-to-br from-accent-50 to-accent-100 border border-accent-200">
-                                    <div class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-accent-600 to-accent-700" id="agents-count">0/3</div>
-                                    <p class="text-xs font-semibold text-gray-700 mt-2">Agents Complete</p>
-                                </div>
-                                <div class="text-center p-4 rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200">
-                                    <div class="text-3xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-purple-700" id="word-count">0</div>
-                                    <p class="text-xs font-semibold text-gray-700 mt-2">Essay Words</p>
+                                <div id="extracted-query-section" class="hidden mt-4 p-4 rounded-lg" style="background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.2);">
+                                    <p class="text-xs font-medium mb-1" style="color: var(--accent-primary);">Extracted Query:</p>
+                                    <p id="extracted-query-text" style="color: var(--text-primary);"></p>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Download Section -->
-                    <div id="download-section" class="status-card hidden">
-                        <h2 class="text-xl font-semibold text-gray-900 mb-4">Research Complete!</h2>
-                        <div class="space-y-4">
-                            <div class="p-4 bg-green-50 border border-green-200 rounded-lg">
-                                <p class="text-sm text-green-800">
-                                    Your research essay has been successfully generated. You can now download it or ask questions using the RAG Chatbot.
-                                </p>
-                            </div>
-                            <div class="flex space-x-4">
-                                <button onclick="downloadEssay()" class="btn-primary">
-                                    Download Essay
-                                </button>
-                                <button onclick="switchTab('chatbot')" class="btn-secondary">
-                                    Ask Questions
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- RAG Chatbot Tab -->
-            <div id="panel-chatbot" class="tab-content p-6 hidden">
-                <div class="space-y-6">
-                    <!-- Session Selector -->
-                    <div class="status-card">
-                        <label for="session-selector" class="block text-sm font-medium text-gray-700 mb-2">
-                            Select Research Session
-                        </label>
-                        <select id="session-selector" class="input-field" onchange="loadSession()">
-                            <option value="">Loading sessions...</option>
-                        </select>
-                    </div>
-
-                    <!-- Language Selector -->
-                    <div class="status-card">
-                        <label for="language-selector" class="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                            <svg class="w-4 h-4 mr-2 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path>
+                        <button onclick="startResearch()" id="start-research-btn" class="btn-primary w-full mt-6">
+                            <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                             </svg>
-                            Response Language
-                        </label>
-                        <select id="language-selector" class="input-field">
-                            <option value="English">English</option>
-                            <option value="French">Français (French)</option>
-                            <option value="Chinese">中文 (Chinese)</option>
-                            <option value="Russian">Русский (Russian)</option>
-                        </select>
-                        <p class="text-xs text-gray-500 mt-2">Select the language for chatbot responses</p>
+                            Start Research
+                        </button>
                     </div>
 
-                    <!-- Chat Container -->
-                    <div class="bg-white border border-gray-200 rounded-lg shadow-sm">
-                        <!-- Chat Messages -->
-                        <div id="chat-messages" class="h-96 overflow-y-auto p-4 space-y-4">
-                            <div class="text-center text-gray-500 py-8">
-                                <p>Select a research session to start chatting</p>
+                    <div id="status-tracker" class="status-card hidden animate-fade-in">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="font-semibold" style="color: var(--text-primary);">Research Progress</h3>
+                            <span id="session-id" class="mono text-sm px-3 py-1 rounded-lg" style="background: var(--bg-deep); color: var(--accent-primary);"></span>
+                        </div>
+
+                        <div class="space-y-3 mb-6">
+                            <div id="step-fetching" class="progress-step">
+                                <div class="step-number">1</div>
+                                <div>
+                                    <p class="font-medium" style="color: var(--text-primary);">Fetching Papers</p>
+                                    <p class="text-sm" style="color: var(--text-muted);">Searching academic databases</p>
+                                </div>
+                            </div>
+                            <div id="step-analyzing" class="progress-step">
+                                <div class="step-number">2</div>
+                                <div>
+                                    <p class="font-medium" style="color: var(--text-primary);">Analyzing Papers</p>
+                                    <p class="text-sm" style="color: var(--text-muted);">Multi-agent processing</p>
+                                </div>
+                            </div>
+                            <div id="step-synthesizing" class="progress-step">
+                                <div class="step-number">3</div>
+                                <div>
+                                    <p class="font-medium" style="color: var(--text-primary);">Synthesizing Essay</p>
+                                    <p class="text-sm" style="color: var(--text-muted);">Generating comprehensive report</p>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Chat Input -->
-                        <div class="border-t border-gray-200 p-4">
-                            <div class="flex space-x-4">
-                                <input
-                                    type="text"
-                                    id="chat-input"
-                                    class="input-field"
-                                    placeholder="Ask a question about the research..."
-                                    onkeypress="handleChatKeyPress(event)"
-                                    disabled
-                                >
-                                <button
-                                    onclick="sendMessage()"
-                                    id="send-btn"
-                                    class="btn-primary"
-                                    disabled
-                                >
-                                    Send
-                                </button>
+                        <div class="grid grid-cols-3 gap-4">
+                            <div class="stat-card">
+                                <div class="stat-value" id="papers-count">0</div>
+                                <div class="stat-label">Papers</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="agents-count">0/3</div>
+                                <div class="stat-label">Agents</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="word-count">0</div>
+                                <div class="stat-label">Words</div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Knowledge Graph Tab -->
-            <div id="panel-graph" class="tab-content p-6 hidden">
-                <div class="space-y-6">
-                    <!-- Session Selector for Graph -->
-                    <div class="status-card">
-                        <div class="flex items-center justify-between mb-4">
-                            <div>
-                                <label for="graph-session-selector" class="block text-sm font-medium text-gray-700 mb-2">
-                                    Select Research Session
-                                </label>
-                                <select id="graph-session-selector" class="input-field" onchange="loadGraphSession()">
-                                    <option value="">Loading sessions...</option>
-                                </select>
-                            </div>
-                            <button
-                                onclick="refreshGraph()"
-                                id="refresh-graph-btn"
-                                class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                disabled
-                            >
-                                <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    <div id="download-section" class="status-card hidden">
+                        <div class="text-center py-4">
+                            <div class="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style="background: rgba(52, 211, 153, 0.1);">
+                                <svg class="w-8 h-8" style="color: var(--success);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                                 </svg>
-                                Rebuild Graph
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Graph Layout -->
-                    <div class="grid grid-cols-3 gap-6">
-                        <!-- Main Graph Visualization -->
-                        <div class="col-span-2">
-                            <div class="status-card h-[700px]">
-                                <h3 class="text-lg font-semibold text-gray-900 mb-4">Knowledge Graph</h3>
-                                <div id="graph-container" class="w-full h-[650px] bg-gray-50 rounded-lg overflow-hidden">
-                                    <div class="flex items-center justify-center h-full">
-                                        <p class="text-gray-500">Select a research session to visualize the knowledge graph</p>
-                                    </div>
-                                </div>
                             </div>
-                        </div>
+                            <h3 class="serif-display text-2xl mb-2" style="color: var(--text-primary);">Research Complete</h3>
+                            <p class="mb-6" style="color: var(--text-secondary);">Your essay has been generated successfully</p>
 
-                        <!-- Side Panel -->
-                        <div class="col-span-1 space-y-6">
-                            <!-- Insights -->
-                            <div class="status-card">
-                                <h3 class="text-lg font-semibold text-gray-900 mb-3">Insights</h3>
-                                <div id="graph-insights-panel" class="space-y-2">
-                                    <p class="text-sm text-gray-500">Load a graph to see insights</p>
-                                </div>
+                            <div id="audio-controls" class="flex flex-col items-center gap-4 mb-6">
+                                <audio id="essay-audio-player" controls class="hidden w-full max-w-md" style="border-radius: 8px;">
+                                    <source id="essay-audio-source" type="audio/mpeg">
+                                </audio>
+
+                                <button id="audio-action-btn" onclick="handleAudioAction()" class="btn-primary flex items-center gap-2">
+                                    <span id="audio-btn-text">Generate Audio</span>
+                                    <span id="audio-spinner" class="hidden">
+                                        <svg class="animate-spin h-4 w-4 inline" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </span>
+                                </button>
+
+                                <p id="audio-status-msg" class="text-sm" style="color: var(--text-secondary); min-height: 20px;">Convert your essay to speech</p>
                             </div>
 
-                            <!-- Node Details -->
-                            <div class="status-card">
-                                <h3 class="text-lg font-semibold text-gray-900 mb-3">Node Details</h3>
-                                <div id="graph-details-panel" class="text-sm text-gray-500">
-                                    <p>Click on a node to see details</p>
-                                </div>
-                            </div>
-
-                            <!-- Central Nodes -->
-                            <div class="status-card">
-                                <h3 class="text-lg font-semibold text-gray-900 mb-3">Most Influential</h3>
-                                <div id="graph-central-nodes-panel" class="space-y-2">
-                                    <p class="text-sm text-gray-500">Load a graph to see central nodes</p>
-                                </div>
-                            </div>
-
-                            <!-- Communities -->
-                            <div class="status-card">
-                                <h3 class="text-lg font-semibold text-gray-900 mb-3">Research Clusters</h3>
-                                <div id="graph-communities-panel" class="space-y-2">
-                                    <p class="text-sm text-gray-500">Load a graph to see clusters</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Graph Legend -->
-                    <div class="status-card">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Legend</h3>
-                        <div class="grid grid-cols-4 gap-4">
-                            <div class="flex items-center space-x-2">
-                                <div class="w-4 h-4 rounded-full" style="background-color: #0ea5e9;"></div>
-                                <span class="text-sm text-gray-700">Papers</span>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <div class="w-4 h-4 rounded-full" style="background-color: #d946ef;"></div>
-                                <span class="text-sm text-gray-700">Concepts</span>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <div class="w-4 h-4 rounded-full" style="background-color: #f59e0b;"></div>
-                                <span class="text-sm text-gray-700">Authors</span>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <div class="w-4 h-4 rounded-full" style="background-color: #10b981;"></div>
-                                <span class="text-sm text-gray-700">Methods</span>
+                            <div class="flex justify-center gap-4">
+                                <button onclick="switchTab('chatbot')" class="btn-secondary">Ask Questions</button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Question Generator Tab -->
-            <div id="panel-questions" class="tab-content p-6 hidden">
-                <div class="space-y-6">
-                    <!-- Header Section -->
-                    <div class="status-card">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h2 class="text-2xl font-bold text-gray-900">AI Research Question Generator</h2>
-                                <p class="text-gray-600 mt-2">Generate innovative research questions from your completed research sessions</p>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <span class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">AI-Powered</span>
-                            </div>
+            <!-- RAG Chatbot Panel -->
+            <div id="panel-chatbot" class="tab-content p-8">
+                <div class="grid grid-cols-3 gap-6">
+                    <div class="space-y-4">
+                        <div class="status-card">
+                            <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Research Session</label>
+                            <select id="session-selector" class="input-field" onchange="loadSession()">
+                                <option value="">Select a session...</option>
+                            </select>
+                        </div>
+                        <div class="status-card">
+                            <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Response Language</label>
+                            <select id="language-selector" class="input-field">
+                                <option value="English">English</option>
+                                <option value="French">Français</option>
+                                <option value="Chinese">中文</option>
+                                <option value="Russian">Русский</option>
+                            </select>
                         </div>
                     </div>
 
-                    <!-- Session Selection & Controls -->
-                    <div class="status-card">
+                    <div class="col-span-2">
+                        <div class="chat-container">
+                            <div id="chat-messages" class="chat-messages">
+                                <div class="text-center py-12" style="color: var(--text-muted);">
+                                    <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                                    </svg>
+                                    <p>Select a research session to start chatting</p>
+                                </div>
+                            </div>
+                            <div class="p-4" style="border-top: 1px solid var(--border-subtle);">
+                                <div class="flex gap-3">
+                                    <input type="text" id="chat-input" class="input-field" placeholder="Ask about the research..." onkeypress="handleChatKeyPress(event)" disabled>
+                                    <button onclick="sendMessage()" id="send-btn" class="btn-primary px-6" disabled>Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Knowledge Graph Panel -->
+            <div id="panel-graph" class="tab-content p-8">
+                <div class="space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <select id="graph-session-selector" class="input-field w-80" onchange="loadGraphSession()">
+                                <option value="">Select a session...</option>
+                            </select>
+                        </div>
+                        <button onclick="refreshGraph()" id="refresh-graph-btn" class="btn-secondary" disabled>
+                            <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                            Rebuild Graph
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-6">
+                        <div class="col-span-3">
+                            <div id="graph-container" class="graph-container flex items-center justify-center">
+                                <p style="color: var(--text-muted);">Select a session to visualize</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="status-card">
+                                <h4 class="font-medium mb-3" style="color: var(--text-primary);">Insights</h4>
+                                <div id="graph-insights-panel" class="text-sm" style="color: var(--text-muted);">Load a graph to see insights</div>
+                            </div>
+                            <div class="status-card">
+                                <h4 class="font-medium mb-3" style="color: var(--text-primary);">Node Details</h4>
+                                <div id="graph-details-panel" class="text-sm" style="color: var(--text-muted);">Click a node</div>
+                            </div>
+                            <div class="status-card">
+                                <h4 class="font-medium mb-3" style="color: var(--text-primary);">Central Nodes</h4>
+                                <div id="graph-central-nodes-panel" class="text-sm" style="color: var(--text-muted);">Load a graph</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ideation Panel -->
+            <div id="panel-questions" class="tab-content p-8">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div class="text-center mb-8">
+                        <h2 class="serif-display" style="font-size: 1.875rem; margin-bottom: 0.5rem;">Research Question Generator</h2>
+                        <p style="color: var(--text-secondary);">AI-powered ideation to discover new research directions</p>
+                    </div>
+
+                    <div class="status-card accent-border">
                         <div class="grid grid-cols-3 gap-4 items-end">
                             <div class="col-span-2">
-                                <label for="questions-session-selector" class="block text-sm font-medium text-gray-700 mb-2">
-                                    Select Research Session
-                                </label>
+                                <label class="block text-sm font-medium mb-2" style="color: var(--text-secondary);">Research Session</label>
                                 <select id="questions-session-selector" class="input-field">
-                                    <option value="">Loading sessions...</option>
+                                    <option value="">Select a session...</option>
                                 </select>
                             </div>
-                            <div>
-                                <button
-                                    onclick="generateQuestions()"
-                                    id="generate-questions-btn"
-                                    class="w-full px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-                                    disabled
-                                >
-                                    Generate Questions
-                                </button>
-                            </div>
+                            <button onclick="generateQuestions()" id="generate-questions-btn" class="btn-primary h-12" disabled>
+                                Generate Questions
+                            </button>
                         </div>
-
-                        <!-- Generation Options -->
-                        <div class="mt-4 flex items-center space-x-6">
-                            <label class="flex items-center space-x-2">
-                                <input type="checkbox" id="include-gaps-checkbox" checked class="rounded text-purple-500">
-                                <span class="text-sm text-gray-700">Identify Research Gaps</span>
+                        <div class="flex items-center gap-6 mt-4">
+                            <label class="flex items-center gap-2 text-sm" style="color: var(--text-secondary);">
+                                <input type="checkbox" id="include-gaps-checkbox" checked class="w-4 h-4 rounded" style="accent-color: var(--accent-primary);">
+                                Identify Research Gaps
                             </label>
-                            <label class="flex items-center space-x-2">
-                                <span class="text-sm text-gray-700">Number of Questions:</span>
-                                <input type="number" id="num-questions-input" value="15" min="5" max="30" class="w-20 px-2 py-1 border border-gray-300 rounded">
+                            <label class="flex items-center gap-2 text-sm" style="color: var(--text-secondary);">
+                                Questions:
+                                <input type="number" id="num-questions-input" value="15" min="5" max="30" class="input-field w-20 py-1.5 px-3">
                             </label>
                         </div>
                     </div>
 
-                    <!-- Loading Indicator -->
                     <div id="questions-loading" class="status-card hidden">
-                        <div class="flex items-center justify-center py-8">
-                            <div class="text-center">
-                                <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mb-4"></div>
-                                <p class="text-gray-600 font-medium">Generating questions...</p>
-                                <p class="text-sm text-gray-500 mt-2">This may take 30-60 seconds</p>
+                        <div class="thinking-indicator">
+                            <div class="orbital-system">
+                                <div class="orbit orbit-1"></div>
+                                <div class="orbit orbit-2"></div>
+                                <div class="orbit orbit-3"></div>
                             </div>
+                            <div class="thinking-dots">
+                                <div class="dot"></div>
+                                <div class="dot"></div>
+                                <div class="dot"></div>
+                            </div>
+                            <p style="color: var(--text-secondary);">Generating research questions...</p>
                         </div>
                     </div>
 
-                    <!-- Research Gaps Section -->
                     <div id="gaps-section" class="status-card hidden">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Identified Research Gaps</h3>
+                        <h3 class="font-semibold mb-4" style="color: var(--text-primary);">Identified Research Gaps</h3>
                         <div id="gaps-container" class="space-y-3"></div>
                     </div>
 
-                    <!-- Questions Section -->
-                    <div id="questions-section" class="hidden">
-                        <!-- Filter Tabs -->
-                        <div class="status-card mb-4">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-semibold text-gray-900">Generated Research Questions</h3>
-                                <div class="flex items-center space-x-2">
-                                    <span class="text-sm text-gray-600">Filter by:</span>
-                                    <select id="question-type-filter" onchange="filterQuestions()" class="px-3 py-1 border border-gray-300 rounded">
+                    <div id="questions-section" class="hidden space-y-4">
+                        <div class="status-card">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-semibold" style="color: var(--text-primary);">Generated Questions</h3>
+                                <div class="flex gap-2">
+                                    <select id="question-type-filter" onchange="filterQuestions()" class="input-field py-1.5 px-3 w-auto">
                                         <option value="all">All Types</option>
                                         <option value="exploratory">Exploratory</option>
                                         <option value="explanatory">Explanatory</option>
                                         <option value="comparative">Comparative</option>
                                         <option value="predictive">Predictive</option>
                                         <option value="evaluative">Evaluative</option>
-                                        <option value="design">Design</option>
-                                        <option value="causal">Causal</option>
-                                        <option value="integrative">Integrative</option>
                                     </select>
-                                    <select id="question-sort" onchange="sortQuestions()" class="px-3 py-1 border border-gray-300 rounded">
+                                    <select id="question-sort" onchange="sortQuestions()" class="input-field py-1.5 px-3 w-auto">
                                         <option value="score">Highest Score</option>
                                         <option value="novelty">Most Novel</option>
                                         <option value="feasibility">Most Feasible</option>
-                                        <option value="impact">Highest Impact</option>
                                     </select>
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Questions List -->
                         <div id="questions-container" class="space-y-4"></div>
                     </div>
 
-                    <!-- Statistics Panel -->
                     <div id="questions-stats" class="status-card hidden">
-                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Statistics</h3>
+                        <h3 class="font-semibold mb-4" style="color: var(--text-primary);">Statistics</h3>
                         <div id="stats-content" class="grid grid-cols-3 gap-4"></div>
                     </div>
                 </div>
@@ -1074,5 +1108,73 @@
 
     <script src="graph-viz.js"></script>
     <script src="app.js"></script>
+    <script>
+        // Tab switching with proper class handling
+        function switchTab(tabName) {
+            document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+
+            document.querySelectorAll('.tab-content').forEach(panel => panel.classList.remove('active'));
+            document.getElementById('panel-' + tabName).classList.add('active');
+
+            if (tabName === 'chatbot') loadAvailableSessions();
+            if (tabName === 'graph') loadGraphSessions();
+            if (tabName === 'questions') loadQuestionSessions();
+        }
+
+        // Scroll to features
+        function scrollToFeatures() {
+            document.getElementById('features-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Progress step updates
+        function updateProgressStep(stepId, status) {
+            const step = document.getElementById(stepId);
+            const numberEl = step.querySelector('.step-number');
+
+            step.classList.remove('active');
+
+            if (status === 'active') {
+                step.classList.add('active');
+                numberEl.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>';
+            } else if (status === 'complete') {
+                numberEl.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+            } else {
+                const stepNum = stepId.includes('fetching') ? '1' : stepId.includes('analyzing') ? '2' : '3';
+                numberEl.textContent = stepNum;
+            }
+        }
+
+        // Theme toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const isDark = !html.hasAttribute('data-theme');
+
+            if (isDark) {
+                html.setAttribute('data-theme', 'light');
+                document.getElementById('sun-icon').classList.add('hidden');
+                document.getElementById('moon-icon').classList.remove('hidden');
+            } else {
+                html.removeAttribute('data-theme');
+                document.getElementById('sun-icon').classList.remove('hidden');
+                document.getElementById('moon-icon').classList.add('hidden');
+            }
+
+            localStorage.setItem('aura-theme', isDark ? 'light' : 'dark');
+        }
+
+        // Initialize theme
+        function initializeTheme() {
+            const saved = localStorage.getItem('aura-theme');
+            if (saved === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+                document.getElementById('moon-icon').classList.remove('hidden');
+                document.getElementById('sun-icon').classList.add('hidden');
+            }
+        }
+
+        // Apply theme on load
+        initializeTheme();
+    </script>
 </body>
 </html>

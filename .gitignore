@@ -130,3 +130,12 @@ nul
 
 # Skill/documentation files (project-specific)
 SKILL.md
+
+# Audio-related files (work in progress)
+aura_research/services/audio_*
+aura_research/database/repositories/audio_*
+aura_research/storage/audio/
+AUDIO_*
+
+# Database migrations (not yet committed)
+database_migrations/

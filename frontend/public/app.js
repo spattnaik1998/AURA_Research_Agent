@@ -119,28 +119,28 @@ function displayUserInfo() {
         let userInfoDiv = document.getElementById('user-info');
 
         if (!userInfoDiv) {
-            // Find the header and add user info
-            const header = document.querySelector('header .flex.items-center.space-x-4');
-            if (header) {
+            // Find the header controls and add user info before it
+            const headerControls = document.getElementById('header-controls');
+            if (headerControls) {
                 userInfoDiv = document.createElement('div');
                 userInfoDiv.id = 'user-info';
-                userInfoDiv.className = 'flex items-center space-x-2';
+                userInfoDiv.className = 'flex items-center gap-4';
                 userInfoDiv.innerHTML = `
-                    <div class="flex items-center space-x-2 px-3 py-2 rounded-lg" style="background-color: var(--bg-tertiary);">
-                        <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-semibold" style="background-color: #1E40AF;">
+                    <div class="flex items-center gap-2 px-3 py-2 rounded-lg" style="background-color: var(--bg-elevated);">
+                        <div class="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm font-semibold" style="background-color: var(--accent-primary);">
                             ${(user.username || 'U').charAt(0).toUpperCase()}
                         </div>
-                        <span class="text-sm font-medium themed-text-secondary">
+                        <span class="text-sm font-medium" style="color: var(--text-secondary);">
                             ${user.full_name || user.username}
                         </span>
                     </div>
-                    <button onclick="logout()" class="p-2 rounded-lg transition" style="color: var(--text-secondary);" onmouseover="this.style.backgroundColor='var(--bg-tertiary)'" onmouseout="this.style.backgroundColor='transparent'" title="Logout">
+                    <button onclick="logout()" class="p-2 rounded-lg transition" style="color: var(--text-secondary); background: transparent;" onmouseover="this.style.backgroundColor='var(--bg-elevated)'" onmouseout="this.style.backgroundColor='transparent'" title="Logout">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                         </svg>
                     </button>
                 `;
-                header.insertBefore(userInfoDiv, header.firstChild);
+                headerControls.parentElement.insertBefore(userInfoDiv, headerControls);
             }
         }
     }
@@ -273,17 +273,23 @@ async function checkBackendConnection() {
  * Switch between tabs
  */
 function switchTab(tabName) {
-    // Update tab buttons
-    document.querySelectorAll('.tab-button').forEach(btn => {
+    // Update tab buttons - use correct selector
+    document.querySelectorAll('.nav-tab').forEach(btn => {
         btn.classList.remove('active');
     });
     document.getElementById(`tab-${tabName}`).classList.add('active');
 
-    // Update tab content
+    // Update tab content - use correct class
     document.querySelectorAll('.tab-content').forEach(panel => {
-        panel.classList.add('hidden');
+        panel.classList.remove('active');
     });
-    document.getElementById(`panel-${tabName}`).classList.remove('hidden');
+    document.getElementById(`panel-${tabName}`).classList.add('active');
+
+    // Scroll to the active panel
+    const activePanel = document.getElementById(`panel-${tabName}`);
+    if (activePanel) {
+        activePanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     // Load sessions when switching to chatbot tab
     if (tabName === 'chatbot') {
@@ -907,6 +913,9 @@ function handleResearchComplete(status) {
     // Show download section
     document.getElementById('download-section').classList.remove('hidden');
 
+    // Initialize audio UI
+    initializeAudioUI();
+
     // Re-enable start button
     const btn = document.getElementById('start-research-btn');
     btn.disabled = false;
@@ -1006,10 +1015,150 @@ function showNotification(message, type = 'info') {
 }
 
 /**
- * Download essay (placeholder)
+ * Audio playback state
  */
-function downloadEssay() {
-    alert('Essay download functionality requires backend API endpoint.\n\nThe essay file is saved in:\naura_research/storage/essays/');
+let audioState = { exists: false, generating: false, currentSessionId: null };
+
+/**
+ * Check if audio exists for current session
+ */
+async function checkAudioStatus() {
+    if (!currentSessionId) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/research/session/${currentSessionId}/audio/status`, {
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        audioState.exists = data.exists;
+        updateAudioUI();
+    } catch (error) {
+        console.error('Error checking audio status:', error);
+    }
+}
+
+/**
+ * Update audio UI based on state
+ */
+function updateAudioUI() {
+    const btnText = document.getElementById('audio-btn-text');
+    const statusMsg = document.getElementById('audio-status-msg');
+
+    if (!btnText || !statusMsg) return;
+
+    if (audioState.exists) {
+        btnText.textContent = 'Play Audio';
+        statusMsg.textContent = 'Audio is ready to play. Click the button to listen.';
+    } else {
+        btnText.textContent = 'Generate Audio';
+        statusMsg.textContent = 'Convert your essay to speech';
+    }
+}
+
+/**
+ * Handle audio button click (generate or play)
+ */
+async function handleAudioAction() {
+    if (audioState.generating) return;
+
+    if (audioState.exists) {
+        await playAudio();
+    } else {
+        await generateAudio();
+    }
+}
+
+/**
+ * Generate audio from essay
+ */
+async function generateAudio() {
+    if (!currentSessionId) {
+        showNotification('No active session', 'error');
+        return;
+    }
+
+    audioState.generating = true;
+
+    // Show loading state
+    const btnText = document.getElementById('audio-btn-text');
+    const spinner = document.getElementById('audio-spinner');
+
+    if (btnText) btnText.textContent = 'Generating...';
+    if (spinner) spinner.classList.remove('hidden');
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/research/session/${currentSessionId}/generate-audio`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to generate audio');
+        }
+
+        audioState.exists = true;
+        showNotification('Audio generated successfully!', 'success');
+        updateAudioUI();
+
+        // Auto-play
+        await playAudio();
+
+    } catch (error) {
+        showNotification('Failed to generate audio: ' + error.message, 'error');
+    } finally {
+        audioState.generating = false;
+        if (spinner) spinner.classList.add('hidden');
+        updateAudioUI();
+    }
+}
+
+/**
+ * Play audio
+ */
+async function playAudio() {
+    if (!currentSessionId) return;
+
+    try {
+        const token = localStorage.getItem('aura_access_token');
+        const response = await fetch(`${API_BASE_URL}/research/session/${currentSessionId}/audio`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch audio');
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        const audioPlayer = document.getElementById('essay-audio-player');
+        const audioSource = document.getElementById('essay-audio-source');
+
+        if (audioPlayer && audioSource) {
+            audioSource.src = audioUrl;
+            audioPlayer.load();
+            audioPlayer.classList.remove('hidden');
+            audioPlayer.play();
+        }
+
+        const btnText = document.getElementById('audio-btn-text');
+        if (btnText) btnText.textContent = 'Play Audio';
+
+    } catch (error) {
+        showNotification('Failed to play audio: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Initialize audio UI when research completes
+ */
+function initializeAudioUI() {
+    audioState.currentSessionId = currentSessionId;
+    checkAudioStatus();
 }
 
 /**

@@ -6,14 +6,17 @@ Integrated with SQL Server database
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import asyncio
 import logging
 from datetime import datetime
+from pathlib import Path
 from ..utils.image_analyzer import get_image_analyzer
 from ..services.db_service import get_db_service
 from ..services.auth_service import get_auth_service
+from ..services.audio_service import get_audio_service
 
 security = HTTPBearer(auto_error=False)
 
@@ -506,6 +509,194 @@ async def get_session_details(
             "analysis_count": len(analyses),
             "has_essay": essay is not None
         }
+    }
+
+
+@router.post("/session/{session_id}/generate-audio")
+async def generate_audio(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
+    """
+    Generate audio from essay text using ElevenLabs API (requires authentication and ownership)
+
+    Args:
+        session_id: Research session ID
+        current_user: Authenticated user from JWT token
+
+    Returns:
+        Status message with audio metadata
+
+    Example:
+        ```
+        POST /research/session/20251018_133827/generate-audio
+        Authorization: Bearer <token>
+        ```
+    """
+    user_id = current_user["user_id"]
+    db_service = get_db_service()
+    audio_service = get_audio_service()
+
+    # Verify session ownership
+    if not db_service.verify_session_ownership(session_id, user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
+
+    # Check if essay exists
+    essay = db_service.get_session_essay(session_id)
+    if not essay:
+        raise HTTPException(
+            status_code=404,
+            detail="No essay found for this session"
+        )
+
+    # Get essay content
+    essay_text = essay.get("full_content")
+    if not essay_text or not essay_text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Essay content is empty"
+        )
+
+    try:
+        # Generate audio
+        result = await audio_service.generate_audio(
+            text=essay_text,
+            session_id=db_service.get_session_id(session_id),
+            voice_id=None  # Use default voice
+        )
+
+        # Save metadata to database
+        audio_filename = Path(result["audio_path"]).name
+        db_service.create_audio_record(
+            session_code=session_id,
+            audio_filename=audio_filename,
+            file_size_bytes=result["file_size"],
+            user_id=user_id
+        )
+
+        return {
+            "status": "success",
+            "message": "Audio generated successfully",
+            "audio_path": result["audio_path"],
+            "file_size": result["file_size"]
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        if "rate limit" in str(e).lower():
+            raise HTTPException(status_code=429, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error generating audio: {e}")
+        raise HTTPException(status_code=500, detail=f"Audio generation failed: {str(e)}")
+
+
+@router.get("/session/{session_id}/audio")
+async def get_audio(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
+    """
+    Get and stream audio file for a session (requires authentication and ownership)
+
+    Args:
+        session_id: Research session ID
+        current_user: Authenticated user from JWT token
+
+    Returns:
+        Audio file as MP3
+
+    Example:
+        ```
+        GET /research/session/20251018_133827/audio
+        Authorization: Bearer <token>
+        ```
+    """
+    user_id = current_user["user_id"]
+    db_service = get_db_service()
+    audio_service = get_audio_service()
+
+    # Verify session ownership
+    if not db_service.verify_session_ownership(session_id, user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
+
+    # Get audio metadata
+    audio_metadata = db_service.get_session_audio(session_id)
+    if not audio_metadata:
+        raise HTTPException(
+            status_code=404,
+            detail="No audio found for this session"
+        )
+
+    # Get audio file path
+    session_id_int = db_service.get_session_id(session_id)
+    audio_path = audio_service.get_audio_path(session_id_int)
+
+    if not audio_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Audio file not found"
+        )
+
+    # Update last access time
+    db_service.update_audio_access_time(session_id)
+
+    # Return audio file
+    return FileResponse(
+        path=audio_path,
+        media_type="audio/mpeg",
+        filename=audio_path.name
+    )
+
+
+@router.get("/session/{session_id}/audio/status")
+async def get_audio_status(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
+    """
+    Check if audio exists for a session (requires authentication and ownership)
+
+    Args:
+        session_id: Research session ID
+        current_user: Authenticated user from JWT token
+
+    Returns:
+        Status with exists flag and metadata
+
+    Example:
+        ```
+        GET /research/session/20251018_133827/audio/status
+        Authorization: Bearer <token>
+        ```
+    """
+    user_id = current_user["user_id"]
+    db_service = get_db_service()
+
+    # Verify session ownership
+    if not db_service.verify_session_ownership(session_id, user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to access this session"
+        )
+
+    # Check if audio exists
+    exists = db_service.audio_exists(session_id)
+    metadata = None
+
+    if exists:
+        metadata = db_service.get_session_audio(session_id)
+
+    return {
+        "exists": exists,
+        "metadata": metadata
     }
 
 
