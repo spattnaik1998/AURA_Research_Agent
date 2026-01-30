@@ -24,17 +24,19 @@ class ResearchSessionRepository(BaseRepository):
         session_code: str,
         query: str,
         user_id: Optional[int] = None,
-        metadata: Optional[Dict] = None
+        metadata: Optional[Dict] = None,
+        source_type: str = "text",
+        source_metadata: Optional[str] = None
     ) -> int:
         """Create a new research session and return the session_id."""
         sql = """
             INSERT INTO ResearchSessions
-            (session_code, user_id, query, status, progress, metadata)
-            VALUES (?, ?, ?, 'pending', 0, ?)
+            (session_code, user_id, query, status, progress, metadata, source_type, source_metadata)
+            VALUES (?, ?, ?, 'pending', 0, ?, ?, ?)
         """
         return self.db.insert_and_get_id(
             sql,
-            (session_code, user_id, query, self.to_json(metadata))
+            (session_code, user_id, query, self.to_json(metadata), source_type, source_metadata)
         )
 
     def get_by_session_code(self, session_code: str) -> Optional[Dict[str, Any]]:

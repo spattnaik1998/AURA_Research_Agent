@@ -27,28 +27,58 @@ class EssayRepository(BaseRepository):
         conclusion: Optional[str] = None,
         full_content: Optional[str] = None,
         full_content_markdown: Optional[str] = None,
+        audio_content: Optional[str] = None,
         references_list: Optional[List[Dict]] = None,
         word_count: Optional[int] = None,
         citation_count: Optional[int] = None,
         synthesis_themes: Optional[List[str]] = None
     ) -> int:
         """Create a new essay record."""
-        query = """
-            INSERT INTO Essays
-            (session_id, title, introduction, body, conclusion,
-             full_content, full_content_markdown, references_list,
-             word_count, citation_count, synthesis_themes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
-        return self.db.insert_and_get_id(
-            query,
-            (
-                session_id, title, introduction, body, conclusion,
-                full_content, full_content_markdown,
-                self.to_json(references_list), word_count, citation_count,
-                self.to_json(synthesis_themes)
+        # Try with audio_content first (standard path when migration is applied)
+        try:
+            query = """
+                INSERT INTO Essays
+                (session_id, title, introduction, body, conclusion,
+                 full_content, full_content_markdown, audio_content, references_list,
+                 word_count, citation_count, synthesis_themes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+            return self.db.insert_and_get_id(
+                query,
+                (
+                    session_id, title, introduction, body, conclusion,
+                    full_content, full_content_markdown, audio_content,
+                    self.to_json(references_list), word_count, citation_count,
+                    self.to_json(synthesis_themes)
+                )
             )
-        )
+        except Exception as e:
+            error_msg = str(e)
+            # Check if error is due to missing audio_content column (defensive fallback)
+            if 'audio_content' in error_msg and ('42S22' in error_msg or 'Invalid column' in error_msg):
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"[EssayRepository] audio_content column not found, falling back to legacy schema")
+                # Retry without audio_content column
+                query = """
+                    INSERT INTO Essays
+                    (session_id, title, introduction, body, conclusion,
+                     full_content, full_content_markdown, references_list,
+                     word_count, citation_count, synthesis_themes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                return self.db.insert_and_get_id(
+                    query,
+                    (
+                        session_id, title, introduction, body, conclusion,
+                        full_content, full_content_markdown,
+                        self.to_json(references_list), word_count, citation_count,
+                        self.to_json(synthesis_themes)
+                    )
+                )
+            else:
+                # Different error, re-raise
+                raise
 
     def create_from_essay_result(
         self,
@@ -64,6 +94,7 @@ class EssayRepository(BaseRepository):
             conclusion=essay_data.get('conclusion'),
             full_content=essay_data.get('essay') or essay_data.get('full_content'),
             full_content_markdown=essay_data.get('essay_markdown'),
+            audio_content=essay_data.get('audio_essay'),  # NEW: store audio-optimized version
             references_list=essay_data.get('references'),
             word_count=essay_data.get('word_count'),
             citation_count=essay_data.get('citation_count'),
@@ -87,6 +118,12 @@ class EssayRepository(BaseRepository):
         query = "SELECT full_content_markdown FROM Essays WHERE session_id = ?"
         result = self.db.fetch_one(query, (session_id,))
         return result['full_content_markdown'] if result else None
+
+    def get_essay_audio_content(self, session_id: int) -> Optional[str]:
+        """Get the audio-optimized version of the essay."""
+        query = "SELECT audio_content FROM Essays WHERE session_id = ?"
+        result = self.db.fetch_one(query, (session_id,))
+        return result['audio_content'] if result else None
 
     def update_essay(
         self,

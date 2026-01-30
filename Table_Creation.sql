@@ -28,6 +28,8 @@ CREATE TABLE ResearchSessions (
         completed_at DATETIME2,
         error_message NVARCHAR(MAX),
         metadata NVARCHAR(MAX),  -- JSON for additional data
+        source_type NVARCHAR(50) DEFAULT 'text',  -- 'text', 'image'
+        source_metadata NVARCHAR(MAX),  -- JSON for source-specific data (e.g., image filename, extracted text)
 
         CONSTRAINT FK_ResearchSessions_Users
             FOREIGN KEY (user_id) REFERENCES Users(user_id)
@@ -38,6 +40,7 @@ CREATE INDEX IX_ResearchSessions_SessionCode ON ResearchSessions(session_code);
 CREATE INDEX IX_ResearchSessions_UserId ON ResearchSessions(user_id);
 CREATE INDEX IX_ResearchSessions_Status ON ResearchSessions(status);
 CREATE INDEX IX_ResearchSessions_CreatedAt ON ResearchSessions(started_at DESC);
+CREATE INDEX IX_ResearchSessions_SourceType ON ResearchSessions(source_type);
 
 CREATE TABLE Papers (
         paper_id INT IDENTITY(1,1) PRIMARY KEY,
@@ -297,6 +300,22 @@ CREATE TABLE AuditLog (
     CREATE INDEX IX_AuditLog_SessionId ON AuditLog(session_id);
     CREATE INDEX IX_AuditLog_Action ON AuditLog(action);
     CREATE INDEX IX_AuditLog_CreatedAt ON AuditLog(created_at DESC);
+
+CREATE TABLE EssayAudio (
+    audio_id INT IDENTITY(1,1) PRIMARY KEY,
+    session_id INT NOT NULL UNIQUE,
+    audio_filename NVARCHAR(255) NOT NULL,
+    file_size_bytes BIGINT,
+    voice_id NVARCHAR(100) DEFAULT '21m00Tcm4TlvDq8ikWAM',
+    generated_at DATETIME2 DEFAULT GETDATE(),
+    last_accessed_at DATETIME2 DEFAULT GETDATE(),
+
+    CONSTRAINT FK_EssayAudio_Sessions
+        FOREIGN KEY (session_id) REFERENCES ResearchSessions(session_id)
+        ON DELETE CASCADE
+);
+
+CREATE INDEX IX_EssayAudio_SessionId ON EssayAudio(session_id);
 
 
 

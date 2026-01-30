@@ -63,7 +63,9 @@ class DatabaseService:
         session_code: str,
         query: str,
         user_id: Optional[int] = None,
-        ip_address: Optional[str] = None
+        ip_address: Optional[str] = None,
+        source_type: str = "text",
+        source_metadata: Optional[Dict[str, Any]] = None
     ) -> int:
         """
         Create a new research session in the database.
@@ -73,16 +75,26 @@ class DatabaseService:
             query: Research query
             user_id: Optional user ID
             ip_address: Optional IP address for audit
+            source_type: Source of the research query ('text' or 'image')
+            source_metadata: Optional JSON metadata for source (e.g., image filename)
 
         Returns:
             session_id from database
         """
         try:
+            # Convert source_metadata dict to JSON string if provided
+            import json
+            source_metadata_json = None
+            if source_metadata:
+                source_metadata_json = json.dumps(source_metadata)
+
             # Create session in database
             session_id = self.sessions.create(
                 session_code=session_code,
                 query=query,
-                user_id=user_id
+                user_id=user_id,
+                source_type=source_type,
+                source_metadata=source_metadata_json
             )
 
             # Validate session_id was created successfully

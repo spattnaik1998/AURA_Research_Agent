@@ -60,6 +60,8 @@ BEGIN
         completed_at DATETIME2,
         error_message NVARCHAR(MAX),
         metadata NVARCHAR(MAX),  -- JSON for additional data
+        source_type NVARCHAR(50) DEFAULT 'text',  -- 'text', 'image'
+        source_metadata NVARCHAR(MAX),  -- JSON for source-specific data (e.g., image filename, extracted text)
 
         CONSTRAINT FK_ResearchSessions_Users
             FOREIGN KEY (user_id) REFERENCES Users(user_id)
@@ -70,6 +72,7 @@ BEGIN
     CREATE INDEX IX_ResearchSessions_UserId ON ResearchSessions(user_id);
     CREATE INDEX IX_ResearchSessions_Status ON ResearchSessions(status);
     CREATE INDEX IX_ResearchSessions_CreatedAt ON ResearchSessions(started_at DESC);
+    CREATE INDEX IX_ResearchSessions_SourceType ON ResearchSessions(source_type);
 END
 GO
 
@@ -418,6 +421,30 @@ END
 GO
 
 -- ============================================
+-- 14. ESSAY AUDIO TABLE
+-- Stores generated audio files from essays
+-- ============================================
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[EssayAudio]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE EssayAudio (
+        audio_id INT IDENTITY(1,1) PRIMARY KEY,
+        session_id INT NOT NULL UNIQUE,
+        audio_filename NVARCHAR(255) NOT NULL,
+        file_size_bytes BIGINT,
+        voice_id NVARCHAR(100) DEFAULT '21m00Tcm4TlvDq8ikWAM',
+        generated_at DATETIME2 DEFAULT GETDATE(),
+        last_accessed_at DATETIME2 DEFAULT GETDATE(),
+
+        CONSTRAINT FK_EssayAudio_Sessions
+            FOREIGN KEY (session_id) REFERENCES ResearchSessions(session_id)
+            ON DELETE CASCADE
+    );
+
+    CREATE INDEX IX_EssayAudio_SessionId ON EssayAudio(session_id);
+END
+GO
+
+-- ============================================
 -- PRINT SUCCESS MESSAGE
 -- ============================================
 PRINT 'AURA Research Database Schema Created Successfully!';
@@ -436,4 +463,5 @@ PRINT '  10. ResearchGaps - Identified research gaps';
 PRINT '  11. ResearchQuestions - Generated questions';
 PRINT '  12. VectorEmbeddings - RAG embeddings';
 PRINT '  13. AuditLog - Action tracking';
+PRINT '  14. EssayAudio - Generated audio files';
 GO

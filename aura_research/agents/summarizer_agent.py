@@ -61,8 +61,8 @@ class SummarizerAgent(BaseAgent):
         body = await self._generate_body(synthesis, analyses)
         conclusion = await self._generate_conclusion(query, synthesis)
 
-        # Step 3: Compile complete essay
-        essay = self._compile_essay(
+        # Step 3: Compile complete essay (both visual and audio versions)
+        essay, audio_essay = self._compile_essay(
             query=query,
             introduction=introduction,
             body=body,
@@ -87,6 +87,7 @@ class SummarizerAgent(BaseAgent):
 
         return {
             "essay": essay,
+            "audio_essay": audio_essay,  # NEW: audio-optimized version
             "file_path": file_path,
             "rag_ready": rag_initialized,  # Signal that RAG is actually initialized
             **metadata
@@ -285,50 +286,52 @@ CRITICAL: Every item must be SPECIFIC and SUBSTANTIVE. No generic placeholders."
         query: str,
         analyses: List[Dict[str, Any]]
     ) -> str:
-        """Generate essay introduction"""
+        """Generate essay introduction with Sanguine Vagabond persona"""
         intro_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a distinguished academic writer specializing in research synthesis.
+            ("system", """You are a highly literate, philosophical essayist with a background in deep tech and political economy. Your prose blends technical proficiency with the gravitas of a classical historian.
 
-Your introduction must:
-- Hook the reader with significance and relevance
-- Demonstrate deep understanding of the field
-- Use scholarly language with precision
-- Set clear expectations for what follows
-- Be engaging yet rigorous"""),
-            ("user", """WRITE A SCHOLARLY INTRODUCTION for a research synthesis essay
+Adopt a 'Sanguine Vagabond' persona—curious, traveled, intellectually satiated. Your tone must be authoritative and sophisticated, yet punctuated with moments of earnest gratitude and awe for human ingenuity.
+
+Your writing style:
+- Use precise, 'high-church' English vocabulary (vicissitudes, precipice, epitomize, efflorescence)
+- Construct long, mellifluous sentences with commas and semi-colons that weave multiple layers
+- Always analyze through a 'macro lens' - paradigm shifts, social contract, systemic impacts
+- Avoid short, choppy sentences
+- Channel the sophistication of Ezra Klein or other distinguished public intellectuals"""),
+            ("user", """WRITE AN OPENING ESSAY for a comprehensive research synthesis.
 
 TOPIC: {query}
 PAPERS ANALYZED: {count}
 
-INTRODUCTION STRUCTURE (3-4 paragraphs, 300-400 words):
+OPENING STRUCTURE (3-4 paragraphs, 400-500 words):
 
-PARAGRAPH 1 - SIGNIFICANCE & CONTEXT:
-- Why is this topic critically important?
-- What real-world problems or questions does it address?
-- What is the current state of knowledge?
-- Use compelling but factual language
+PARAGRAPH 1 - THE HUMAN CONDITION & SIGNIFICANCE:
+- Begin with the profound human questions or existential stakes at play
+- Why does this topic represent a crucial vicissitude in our intellectual or technological journey?
+- Frame the research within broader currents of civilization, innovation, or societal evolution
+- Use evocative yet precise language that captures both wonder and critical analysis
 
-PARAGRAPH 2 - RESEARCH LANDSCAPE:
-- What major approaches or themes exist in this area?
-- Who are the key researchers or schools of thought?
-- What recent developments have shaped the field?
-- Establish breadth of the research reviewed
+PARAGRAPH 2 - THE INTELLECTUAL LANDSCAPE:
+- Survey the paradigmatic approaches and schools of thought with a historian's eye
+- Identify the intellectual lineages, theoretical frameworks, or methodological efflorescence
+- Note recent inflection points that have shifted the terrain
+- Demonstrate deep familiarity while maintaining narrative momentum
 
-PARAGRAPH 3 - SCOPE & OBJECTIVES:
-- What specific aspects does this synthesis cover?
-- What are the key questions addressed?
-- What themes will be explored?
-- What can readers expect to learn?
+PARAGRAPH 3 - SCOPE & INTELLECTUAL VOYAGE:
+- Establish what this synthesis will illuminate and explore
+- Frame the investigation as an intellectual journey through the research landscape
+- Preview the thematic threads with sophisticated prose
+- Set expectations for the depth and breadth of analysis to follow
 
-WRITING GUIDELINES:
-- Use sophisticated academic vocabulary
-- Maintain formal scholarly tone
-- Be specific and concrete (avoid vague generalizations)
-- Support claims with implicit reference to the literature
-- Create logical flow between paragraphs
-- Engage the reader's interest while maintaining rigor
+STYLISTIC REQUIREMENTS:
+- Long, flowing sentences that use semi-colons and commas to build complexity
+- Sophisticated vocabulary that describes complexity and transition
+- No generic academic phrases - be specific and original
+- Demonstrate both technical precision and humanistic perspective
+- Create a sense of intellectual grandeur without pomposity
+- Show genuine appreciation for the ingenuity and effort behind the research
 
-Write a compelling, scholarly introduction that sets the stage for an exceptional research synthesis.""")
+Write an opening that would befit a distinguished public intellectual's essay in a premier publication.""")
         ])
 
         try:
@@ -346,19 +349,14 @@ Write a compelling, scholarly introduction that sets the stage for an exceptiona
         synthesis: Dict[str, Any],
         analyses: List[Dict[str, Any]]
     ) -> str:
-        """Generate essay body sections"""
+        """Generate essay body sections with Sanguine Vagabond persona"""
         body_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an EXPERT academic writer with extensive experience in research synthesis and systematic reviews.
+            ("system", """You are a distinguished essayist and intellectual historian. Your analysis combines deep technical understanding with classical prose.
 
-Your essay body must:
-- Present a coherent narrative organized by themes
-- Integrate findings from multiple sources
-- Provide critical analysis, not just summary
-- Use specific examples and concrete evidence
-- Maintain scholarly rigor while being readable
-- Include proper academic discourse markers
-- Demonstrate synthesis, comparison, and evaluation"""),
-            ("user", """WRITE THE MAIN BODY of a comprehensive research synthesis essay
+Embody the 'Sanguine Vagabond' - authoritative, sophisticated, curious about human achievement. Your writing reveals patterns, paradigm shifts, and systemic insights through long, flowing sentences that build layered arguments.
+
+Write like a premier public intellectual (Ezra Klein, Isaiah Berlin) - technically proficient yet deeply humanistic."""),
+            ("user", """WRITE THE ANALYTICAL BODY of a comprehensive research synthesis.
 
 ═══════════════════════════════════════════════════════════
 SYNTHESIS DATA:
@@ -376,64 +374,58 @@ Top Contributions: {contributions}
 Papers Analyzed: {count}
 ═══════════════════════════════════════════════════════════
 
-BODY STRUCTURE (6-8 paragraphs, 800-1200 words):
+BODY STRUCTURE (7-10 paragraphs, 1200-1500 words):
 
-Organize content into THEMATIC SECTIONS. For each major theme:
+Organize as a THEMATIC INTELLECTUAL NARRATIVE. For each major theme:
 
-1. INTRODUCE THE THEME:
-   - Present the theme with context
-   - Explain its significance to the research question
-   - Preview what will be discussed
+1. INTRODUCE WITH SYSTEMIC FRAMING:
+   - Position the theme within broader paradigmatic shifts or epistemological currents
+   - Explain its significance to the human condition, social contract, or technological evolution
+   - Use the 'macro lens' - how does this theme epitomize larger patterns?
 
-2. SYNTHESIZE FINDINGS:
-   - Integrate findings from multiple papers
-   - Use specific examples and concrete evidence
-   - Compare and contrast different approaches
-   - Highlight consensus and contradictions
+2. SYNTHESIZE WITH FLOWING PROSE:
+   - Weave findings from multiple sources into coherent narrative threads
+   - Use long sentences with semi-colons and commas to build complex arguments
+   - Compare approaches with sophisticated transitions ("Moreover," "Nevertheless," "In this light,")
+   - Highlight consensus and productive tensions
 
-3. ANALYZE CRITICALLY:
-   - Evaluate methodological strengths and weaknesses
-   - Discuss implications of findings
-   - Connect findings to broader research context
-   - Identify patterns and trends
+3. ANALYZE CRITICALLY WITH DEPTH:
+   - Evaluate methodological approaches with intellectual rigor
+   - Discuss implications for theory, practice, and society
+   - Identify what these findings reveal about broader intellectual or civilizational questions
+   - Note patterns, inflection points, and paradigmatic vicissitudes
 
-4. TRANSITION SMOOTHLY:
-   - Use clear transitions between paragraphs
-   - Build a logical narrative arc
-   - Connect themes to each other where relevant
+4. MAINTAIN NARRATIVE MOMENTUM:
+   - Use elegant transitions that connect themes organically
+   - Build toward larger insights about the field's trajectory
+   - Create a sense of intellectual journey and discovery
 
-WRITING REQUIREMENTS:
+STYLISTIC IMPERATIVES:
 
-SPECIFICITY:
-- Use actual methodology names and technical terms
-- Reference concrete findings (not "studies showed...")
-- Include specific examples from the research
+VOCABULARY:
+- Use precise, sophisticated terminology (vicissitudes, precipice, epitomize, efflorescence, paradigm, inflection point)
+- Avoid generic academic phrases
+- Choose words that convey complexity, transition, and significance
 
-ACADEMIC DISCOURSE:
-- Use phrases like: "Research demonstrates...", "Studies consistently indicate...", "Emerging evidence suggests...", "While some scholars argue...", "In contrast...", "Moreover...", "Nevertheless..."
-- Maintain formal scholarly tone
-- Use precise academic vocabulary
+SENTENCE STRUCTURE:
+- Long, mellifluous sentences that use commas and semi-colons
+- Weave multiple clauses into unified arguments
+- Avoid short, choppy sentences
+- Create rhythm and flow
 
-SYNTHESIS (NOT SUMMARY):
-- DON'T just list what each paper found
-- DO integrate findings into coherent themes
-- DO compare and contrast approaches
-- DO evaluate significance and implications
-- DO identify patterns across studies
+ANALYTICAL DEPTH:
+- Always seek the macro lens - paradigm shifts, social contract implications, systemic patterns
+- Connect technical findings to humanistic concerns
+- Show appreciation for human ingenuity while maintaining critical distance
+- Identify what research reveals about civilization, progress, or intellectual evolution
 
-CRITICAL ANALYSIS:
-- Evaluate methodological approaches
-- Discuss limitations where relevant
-- Identify gaps in current knowledge
-- Note contradictions or inconsistencies
-- Assess practical implications
+INTEGRATION:
+- Don't list findings - synthesize into coherent narrative
+- Compare and contrast with sophisticated prose
+- Build toward larger insights
+- Demonstrate deep understanding
 
-CITATIONS:
-- Reference findings appropriately
-- Use phrases like "research in this area has shown...", "studies have demonstrated...", "evidence indicates..."
-- When discussing specific techniques or findings, indicate this is drawn from the reviewed literature
-
-Write a scholarly, well-integrated body that demonstrates DEEP SYNTHESIS and CRITICAL THINKING.""")
+Write body paragraphs that demonstrate intellectual sophistication, technical mastery, and humanistic perspective - worthy of a premier publication.""")
         ])
 
         try:
@@ -455,87 +447,63 @@ Write a scholarly, well-integrated body that demonstrates DEEP SYNTHESIS and CRI
         query: str,
         synthesis: Dict[str, Any]
     ) -> str:
-        """Generate essay conclusion"""
+        """Generate essay conclusion with Sanguine Vagabond persona"""
         conclusion_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an accomplished academic writer specializing in impactful research conclusions.
+            ("system", """You are an accomplished intellectual essayist bringing closure to a sophisticated analysis.
 
-Your conclusion must:
-- Synthesize key insights (not just repeat)
-- Emphasize significance and implications
-- Provide forward-looking perspective
-- Leave reader with clear understanding of contribution
-- Maintain scholarly gravitas while being compelling"""),
-            ("user", """WRITE A COMPELLING CONCLUSION for a research synthesis essay
+As the 'Sanguine Vagabond', synthesize insights with gratitude for human achievement while maintaining critical sophistication. Your conclusion should elevate the discussion, connect to broader civilizational questions, and leave readers with profound insights.
+
+Write with the gravitas and eloquence of a premier public intellectual."""),
+            ("user", """WRITE A POWERFUL CONCLUSION for this research synthesis.
 
 ═══════════════════════════════════════════════════════════
 TOPIC: {query}
 
-KEY THEMES:
-{themes}
+KEY THEMES: {themes}
 
-MAIN CONTRIBUTIONS:
-{contributions}
+MAIN CONTRIBUTIONS: {contributions}
 
-RESEARCH GAPS:
-{gaps}
+RESEARCH GAPS: {gaps}
 
-METHODOLOGIES REVIEWED:
-{methodologies}
+METHODOLOGIES REVIEWED: {methodologies}
 ═══════════════════════════════════════════════════════════
 
-CONCLUSION STRUCTURE (3-4 paragraphs, 300-400 words):
+CONCLUSION STRUCTURE (3-4 paragraphs, 400-500 words):
 
-PARAGRAPH 1 - SYNTHESIS OF INSIGHTS:
-- Synthesize (don't just summarize) the most important findings
-- What are the overarching insights from this body of research?
-- What patterns or trends emerged across the literature?
-- What do these findings collectively tell us?
+PARAGRAPH 1 - SYNTHESIS AT THE MACRO LEVEL:
+- Elevate findings to reveal overarching patterns and paradigmatic shifts
+- What do these insights collectively tell us about intellectual evolution, human progress, or systemic change?
+- Use long, flowing sentences that weave multiple insights together
+- Show both the technical achievement and humanistic significance
 
-PARAGRAPH 2 - SIGNIFICANCE & IMPLICATIONS:
-- Why do these findings matter?
-- What are the theoretical implications?
-- What are the practical implications?
-- How does this advance the field?
-- What problems can now be solved or approached differently?
+PARAGRAPH 2 - CIVILIZATIONAL & SYSTEMIC IMPLICATIONS:
+- How do these findings shift paradigms, inform the social contract, or alter our understanding?
+- What are the implications for society, technology, policy, or human flourishing?
+- Connect technical findings to broader questions of human civilization
+- Demonstrate both critical analysis and appreciation for ingenuity
 
-PARAGRAPH 3 - FUTURE DIRECTIONS:
-- What are the most promising avenues for future research?
-- What questions remain unanswered?
-- What new questions have emerged from this synthesis?
-- How might the field evolve based on current trends?
+PARAGRAPH 3 - THE HORIZON OF INQUIRY:
+- What intellectual vicissitudes lie ahead?
+- Where do the most promising avenues of investigation lead?
+- What unanswered questions beckon further exploration?
+- Frame future directions as part of humanity's ongoing intellectual journey
 
-OPTIONAL PARAGRAPH 4 - BROADER IMPACT (if appropriate):
-- What is the broader significance beyond the immediate field?
-- What interdisciplinary connections exist?
-- What societal or practical impact might this research have?
+OPTIONAL PARAGRAPH 4 - THE BROADER VISTA:
+- Step back to the widest lens - what does this body of work mean for human understanding?
+- Connect to interdisciplinary concerns, philosophical questions, or civilizational challenges
+- End with a memorable insight that captures both wonder and wisdom
+- Leave readers with a sense of intellectual satisfaction and renewed curiosity
 
-WRITING REQUIREMENTS:
+STYLISTIC REQUIREMENTS:
 
-SYNTHESIS (not summary):
-- Don't repeat what was already said
-- Elevate to higher-level insights
-- Connect dots between themes
-- Show the bigger picture
+- Long, sophisticated sentences using semi-colons and commas
+- High-church vocabulary (vicissitudes, precipice, efflorescence, paradigm)
+- Macro lens framing (systemic, paradigmatic, civilizational)
+- Balance critical rigor with genuine appreciation for human achievement
+- Create sense of intellectual closure while opening new horizons
+- End on a note of both gravitas and optimism
 
-FORWARD-LOOKING:
-- Be specific about future directions
-- Identify concrete research opportunities
-- Suggest specific methodological advances needed
-- Anticipate emerging trends
-
-IMPACTFUL:
-- Emphasize significance without overstating
-- Use strong but measured language
-- End with a memorable insight
-- Leave reader understanding why this matters
-
-SCHOLARLY TONE:
-- Maintain academic rigor
-- Use sophisticated vocabulary
-- Employ proper academic discourse markers
-- Balance confidence with appropriate hedging
-
-Write a conclusion that provides closure while opening new horizons. Make it intellectually satisfying and professionally impactful.""")
+Write a conclusion that befits a distinguished essay in a premier intellectual publication - technically precise, humanistically profound, and beautifully written.""")
         ])
 
         try:
@@ -551,6 +519,28 @@ Write a conclusion that provides closure while opening new horizons. Make it int
         except Exception as e:
             return f"Conclusion could not be generated: {str(e)}"
 
+    def _compile_audio_essay(
+        self,
+        introduction: str,
+        body: str,
+        conclusion: str
+    ) -> str:
+        """
+        Compile essay sections into audio-optimized prose.
+
+        No headers, no metadata, no dates - just flowing prose suitable
+        for professional audio narration (Ezra Klein style).
+        """
+        # Join sections with simple paragraph breaks
+        # No headers, no dates, no "Generated by AURA" - just pure prose
+        audio_essay = f"""{introduction}
+
+{body}
+
+{conclusion}"""
+
+        return audio_essay.strip()
+
     def _compile_essay(
         self,
         query: str,
@@ -558,11 +548,16 @@ Write a conclusion that provides closure while opening new horizons. Make it int
         body: str,
         conclusion: str,
         analyses: List[Dict[str, Any]]
-    ) -> str:
-        """Compile all sections into final essay"""
+    ) -> tuple:
+        """
+        Compile all sections into final essay - both visual and audio versions
+
+        Returns:
+            Tuple of (visual_essay, audio_essay)
+        """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        essay = f"""# Research Essay: {query}
+        visual_essay = f"""# Research Essay: {query}
 
 **Generated by AURA Research Assistant**
 **Date:** {timestamp}
@@ -604,27 +599,30 @@ Write a conclusion that provides closure while opening new horizons. Make it int
 
                 # Format citation
                 if authors != "Information not provided in abstract" and year != "Information not provided in abstract":
-                    essay += f"{i}. {authors} ({year}). {title}\n"
+                    visual_essay += f"{i}. {authors} ({year}). {title}\n"
                 else:
-                    essay += f"{i}. {title}\n"
+                    visual_essay += f"{i}. {title}\n"
                     if authors != "Information not provided in abstract":
-                        essay += f"   Authors: {authors}\n"
+                        visual_essay += f"   Authors: {authors}\n"
                     if year != "Information not provided in abstract":
-                        essay += f"   Year: {year}\n"
+                        visual_essay += f"   Year: {year}\n"
             else:
                 # Fallback to analysis-level data
                 title = analysis.get("title", analysis.get("summary", "Unknown Title")[:100])
-                essay += f"{i}. {title}\n"
+                visual_essay += f"{i}. {title}\n"
                 url = analysis.get("source_url", "")
 
             if url:
-                essay += f"   URL: {url}\n"
-            essay += "\n"
+                visual_essay += f"   URL: {url}\n"
+            visual_essay += "\n"
 
-        essay += f"\n---\n\n*This essay was generated by AURA - Autonomous Unified Research Assistant*\n"
-        essay += f"*Generated with Claude Code (https://claude.com/claude-code)*\n"
+        visual_essay += f"\n---\n\n*This essay was generated by AURA - Autonomous Unified Research Assistant*\n"
+        visual_essay += f"*Generated with Claude Code (https://claude.com/claude-code)*\n"
 
-        return essay
+        # AUDIO VERSION (for ElevenLabs) - clean prose only
+        audio_essay = self._compile_audio_essay(introduction, body, conclusion)
+
+        return visual_essay, audio_essay
 
     def _save_essay(self, query: str, essay: str) -> str:
         """Save essay to .txt file"""

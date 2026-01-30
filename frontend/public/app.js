@@ -455,16 +455,18 @@ async function startResearch() {
         document.getElementById('status-tracker').classList.remove('hidden');
 
         // Start research via API
+        const requestBody = {
+            query: query,
+            source_type: currentInputMode === 'image' ? 'image' : 'text'
+        };
+
         const response = await fetch(`${API_BASE_URL}/research/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 ...getAuthHeaders()
             },
-            body: JSON.stringify({
-                query: query,
-                user_id: getCurrentUserId()
-            })
+            body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {

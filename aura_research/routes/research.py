@@ -87,6 +87,8 @@ def verify_session_access(
 class ResearchRequest(BaseModel):
     """Research request model"""
     query: str
+    source_type: str = "text"  # 'text' or 'image'
+    source_metadata: Optional[Dict[str, Any]] = None  # JSON metadata for image source
     # Note: user_id is now extracted from JWT token, not from request body
 
 
@@ -131,7 +133,9 @@ async def run_research_workflow(
     query: str,
     session_id: str,
     user_id: Optional[int] = None,
-    ip_address: Optional[str] = None
+    ip_address: Optional[str] = None,
+    source_type: str = "text",
+    source_metadata: Optional[Dict[str, Any]] = None
 ):
     """
     Run the research workflow in the background with database integration
@@ -141,6 +145,8 @@ async def run_research_workflow(
         session_id: Session ID (session_code)
         user_id: Optional user ID
         ip_address: Client IP address
+        source_type: Source of query ('text' or 'image')
+        source_metadata: Optional JSON metadata for source
     """
     db_service = get_db_service()
 
@@ -150,7 +156,9 @@ async def run_research_workflow(
             session_code=session_id,
             query=query,
             user_id=user_id,
-            ip_address=ip_address
+            ip_address=ip_address,
+            source_type=source_type,
+            source_metadata=source_metadata
         )
 
         # Update status: Starting
@@ -210,6 +218,7 @@ async def run_research_workflow(
         essay_data = {
             'title': f"Research on: {query}",
             'essay': result.get('essay'),
+            'audio_essay': result.get('audio_essay'),  # NEW: audio-optimized version
             'word_count': result.get('essay_metadata', {}).get('word_count', 0),
             'citation_count': result.get('essay_metadata', {}).get('citations', 0),
             'themes': result.get('synthesis', {}).get('main_themes', [])
@@ -310,7 +319,9 @@ async def start_research(
             request.query,
             session_id,
             user_id,
-            ip_address
+            ip_address,
+            request.source_type,
+            request.source_metadata
         )
 
         return ResearchResponse(
@@ -552,8 +563,8 @@ async def generate_audio(
             detail="No essay found for this session"
         )
 
-    # Get essay content
-    essay_text = essay.get("full_content")
+    # Get essay content - prefer audio_content, fallback to full_content
+    essay_text = essay.get("audio_content") or essay.get("full_content")
     if not essay_text or not essay_text.strip():
         raise HTTPException(
             status_code=400,
