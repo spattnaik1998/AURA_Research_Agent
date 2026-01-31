@@ -22,12 +22,15 @@ app = FastAPI(
 )
 
 # CORS middleware for frontend integration
+import os
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure based on frontend URL in production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Include routers
@@ -114,4 +117,22 @@ async def shutdown_event():
     logger.info("[AURA] Backend server shutting down")
 
 if __name__ == "__main__":
-    uvicorn.run("aura_research.main:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+    environment = os.getenv("ENVIRONMENT", "development")
+
+    if environment == "production":
+        uvicorn.run(
+            "aura_research.main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=False,
+            workers=4,
+            log_level="info"
+        )
+    else:
+        uvicorn.run(
+            "aura_research.main:app",
+            host="0.0.0.0",
+            port=8000,
+            reload=True
+        )

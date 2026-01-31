@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # SQL Server (optional - use if you don't have existing SQL Server)
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: aura-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourStrong!Passw0rd
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+      - ./database:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P YourStrong!Passw0rd -Q "SELECT 1" -C
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - aura-network
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: aura-backend
+    environment:
+      - ENVIRONMENT=production
+      - DB_USE_SQL_AUTH=true
+      - DB_SERVER=sqlserver
+      - DB_DATABASE=AURA_Research
+      - DB_USERNAME=sa
+      - DB_PASSWORD=YourStrong!Passw0rd
+      - DB_DRIVER={ODBC Driver 17 for SQL Server}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SERPER_API_KEY=${SERPER_API_KEY}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+      - ./logs:/app/logs
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - aura-network
+
+  # Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: aura-frontend
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - API_BASE_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - aura-network
+
+  # Nginx reverse proxy (optional - for unified access point)
+  nginx:
+    image: nginx:alpine
+    container_name: aura-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    networks:
+      - aura-network
+
+volumes:
+  sqlserver_data:
+
+networks:
+  aura-network:
+    driver: bridge

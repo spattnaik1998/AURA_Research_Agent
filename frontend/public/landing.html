@@ -688,8 +688,9 @@
         </div>
     </div>
 
+    <script src="/api-config.js"></script>
     <script>
-        const API_URL = 'http://localhost:8000';
+        const API_URL = window.API_CONFIG?.baseUrl || 'http://localhost:8000';
 
         // Check if already logged in
         window.onload = function() {

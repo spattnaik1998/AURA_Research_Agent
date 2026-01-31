@@ -37,13 +37,29 @@ class DatabaseConnection:
 
     @property
     def connection_string(self) -> str:
-        """Build connection string with Windows Authentication."""
-        return (
-            f"Driver={self.DRIVER};"
-            f"Server={self.SERVER};"
-            f"Database={self.DATABASE};"
-            f"Trusted_Connection=yes;"
-        )
+        """Build connection string - supports both Windows and SQL auth."""
+        import os
+        use_sql_auth = os.getenv("DB_USE_SQL_AUTH", "false").lower() == "true"
+
+        if use_sql_auth:
+            # Docker/Production: SQL Authentication
+            username = os.getenv("DB_USERNAME")
+            password = os.getenv("DB_PASSWORD")
+            return (
+                f"Driver={self.DRIVER};"
+                f"Server={self.SERVER};"
+                f"Database={self.DATABASE};"
+                f"Uid={username};"
+                f"Pwd={password};"
+            )
+        else:
+            # Development: Windows Authentication
+            return (
+                f"Driver={self.DRIVER};"
+                f"Server={self.SERVER};"
+                f"Database={self.DATABASE};"
+                f"Trusted_Connection=yes;"
+            )
 
     def connect(self) -> pyodbc.Connection:
         """Establish database connection."""

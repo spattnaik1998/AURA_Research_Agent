@@ -8,9 +8,17 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8000';
 
 // Middleware
 app.use(express.json());
+
+// Inject API configuration
+app.get('/api-config.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.send(`window.API_CONFIG = { baseUrl: '${API_BASE_URL}' };`);
+});
+
 app.use(express.static('public'));
 
 // Serve landing page as default
