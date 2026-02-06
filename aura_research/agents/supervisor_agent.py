@@ -12,15 +12,14 @@ import time
 from functools import wraps
 from .base_agent import BaseAgent, AgentStatus
 from .subordinate_agent import SubordinateAgent
-from ..utils.config import SERPER_API_KEY, MAX_SUBORDINATE_AGENTS, BATCH_SIZE
+from ..utils.config import SERPER_API_KEY, MAX_SUBORDINATE_AGENTS, BATCH_SIZE, ALLOW_MOCK_DATA
+from ..services.paper_validation_service import PaperValidationService
+from ..services.source_sufficiency_service import SourceSufficiencyService
 import json
 import os
 
 # Setup logger
 logger = logging.getLogger('aura.agents')
-
-# Debug mode for mock data (set via environment)
-DEBUG_MODE = os.getenv("AURA_DEBUG_MODE", "false").lower() == "true"
 
 
 def retry_with_backoff(retries: int = 3, backoff_factor: float = 2.0):
@@ -67,6 +66,8 @@ class SupervisorAgent(BaseAgent):
         self.subordinate_agents: List[SubordinateAgent] = []
         self.papers: List[Dict[str, Any]] = []
         self.subordinate_results: List[Dict[str, Any]] = []
+        self.paper_validator = PaperValidationService()
+        self.sufficiency_checker = SourceSufficiencyService()
 
     async def run(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -174,44 +175,56 @@ class SupervisorAgent(BaseAgent):
 
     async def _fetch_papers(self, query: str) -> List[Dict[str, Any]]:
         """
-        Fetch research papers using Serper API with fallback.
+        Fetch and validate research papers using Serper API with NO fallback.
 
         Args:
             query: Search query
 
         Returns:
-            List of paper metadata
+            List of validated paper metadata
+
+        Raises:
+            ValueError: If papers cannot be fetched or validated
         """
-        # Use mock data in debug mode
-        if DEBUG_MODE:
-            logger.info("DEBUG_MODE enabled - using mock papers")
-            return self._get_mock_papers(query)
+        logger.info(f"Fetching papers for query: {query}")
 
         try:
+            # Fetch from Serper API
             papers = await self._fetch_papers_api(query)
-            if papers:
-                return papers
-            else:
-                logger.warning("Serper API returned no papers, using mock data")
-                return self._get_mock_papers(query)
+
+            if not papers:
+                raise ValueError(
+                    "No papers found. Your search query returned no results. "
+                    "Please try different keywords or a broader search term."
+                )
+
+            logger.info(f"Fetched {len(papers)} papers from Serper API")
+
+            # Validate papers (Layer 1)
+            valid_papers, validation_results = await self.paper_validator.validate_papers(papers)
+            logger.info(f"Validation complete: {len(valid_papers)} valid papers")
+
+            # Check source sufficiency (Layer 2)
+            sufficiency = self.sufficiency_checker.check_sufficiency(papers, validation_results)
+
+            if not sufficiency.is_sufficient:
+                # Generate detailed error message
+                from ..utils.error_messages import get_insufficient_papers_error
+                error_msg = self.sufficiency_checker.get_sufficiency_error_message(sufficiency)
+                logger.error(f"Insufficient sources: {error_msg}")
+                raise ValueError(error_msg)
+
+            logger.info(f"Source sufficiency check passed. Effective score: {sufficiency.effective_count:.2f}")
+
+            return valid_papers
 
         except Exception as e:
-            logger.error(f"Serper API failed after retries: {str(e)}")
-            logger.warning("Falling back to mock data due to API failure")
-            return self._get_mock_papers(query)
-
-    def _get_mock_papers(self, query: str) -> List[Dict[str, Any]]:
-        """Fallback mock data for testing"""
-        return [
-            {
-                "title": f"Research on {query} - Paper {i+1}",
-                "snippet": f"This paper explores aspects of {query} and provides insights...",
-                "link": f"https://example.com/paper{i+1}",
-                "publication_info": {"year": 2024},
-                "cited_by": {"total": i * 10}
-            }
-            for i in range(9)  # 9 papers for 3 agents with 3 papers each
-        ]
+            logger.error(f"Paper fetching/validation failed: {str(e)}")
+            # Do NOT fall back to mock data
+            raise ValueError(
+                f"Unable to fetch and validate academic papers: {str(e)}\n"
+                f"No mock data will be generated. Please check your query and try again."
+            )
 
     async def _categorize_papers(self, papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

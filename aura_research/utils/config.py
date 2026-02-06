@@ -53,6 +53,36 @@ VECTOR_STORE_PATH = str(VECTOR_STORE_DIR / "faiss_index")
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 
+# Academic Rigor & Quality Control Configuration
+# Paper Validation
+CROSSREF_API_URL = "https://api.crossref.org/works"
+OPENALEX_API_URL = "https://api.openalex.org/works"
+MIN_VALID_PAPERS = 5
+VALIDATION_CACHE_HOURS = 24
+
+# Source Sufficiency
+MIN_UNIQUE_VENUES = 3
+MIN_RECENT_PAPERS = 2
+MIN_EFFECTIVE_COUNT = 4.0
+
+# Quality Scoring
+MIN_QUALITY_SCORE = 5.0
+FLAG_QUALITY_SCORE = 6.5
+EXCELLENT_QUALITY_SCORE = 8.0
+CITATION_DENSITY_TARGET = 0.0057  # 1 per 175 words
+MAX_ESSAY_REGENERATION_ATTEMPTS = 2
+
+# Citation Verification
+MIN_CITATION_ACCURACY = 1.0  # 100% required
+
+# Fact Checking
+FACT_CHECK_TOP_N_CLAIMS = 10
+MIN_SUPPORTED_CLAIMS_PCT = 0.85
+
+# Academic Rigor Settings
+STRICT_MODE = True
+ALLOW_MOCK_DATA = False  # CRITICAL: Must remain False
+
 def get_storage_paths():
     """Return all storage paths as a dictionary"""
     return {

@@ -7,10 +7,24 @@ from typing import Dict, Any, List
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from .base_agent import BaseAgent
-from ..utils.config import OPENAI_API_KEY, GPT_MODEL, ESSAYS_DIR
+from ..utils.config import (
+    OPENAI_API_KEY, GPT_MODEL, ESSAYS_DIR,
+    MIN_QUALITY_SCORE, MAX_ESSAY_REGENERATION_ATTEMPTS,
+    MIN_CITATION_ACCURACY
+)
+from ..services.quality_scoring_service import QualityScoringService
+from ..services.citation_verification_service import CitationVerificationService
+from ..services.fact_checking_service import FactCheckingService
+from ..utils.error_messages import (
+    get_low_quality_essay_error,
+    get_citation_verification_failed_error,
+    get_fact_check_failed_error,
+    get_success_message
+)
 import json
 from datetime import datetime
 from pathlib import Path
+import asyncio
 
 
 class SummarizerAgent(BaseAgent):
@@ -26,8 +40,12 @@ class SummarizerAgent(BaseAgent):
         self.llm = ChatOpenAI(
             model=GPT_MODEL,
             api_key=OPENAI_API_KEY,
-            temperature=0.4  # Balanced for creative but accurate synthesis
+            temperature=0.3  # Precise academic tone
         )
+        self.quality_scorer = QualityScoringService()
+        self.citation_verifier = CitationVerificationService()
+        self.fact_checker = FactCheckingService()
+        self.regeneration_attempts = 0
 
     async def run(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -56,12 +74,15 @@ class SummarizerAgent(BaseAgent):
         # Step 1: Create structured synthesis
         synthesis = await self._create_synthesis(query, analyses)
 
-        # Step 2: Generate essay sections
-        introduction = await self._generate_introduction(query, analyses)
-        body = await self._generate_body(synthesis, analyses)
-        conclusion = await self._generate_conclusion(query, synthesis)
+        # Step 2: Build paper reference data for citation injection
+        paper_references = self._build_paper_reference_data(analyses)
 
-        # Step 3: Compile complete essay (both visual and audio versions)
+        # Step 3: Generate essay sections
+        introduction = await self._generate_introduction(query, analyses, synthesis, paper_references)
+        body = await self._generate_body(synthesis, analyses, paper_references)
+        conclusion = await self._generate_conclusion(query, synthesis, paper_references)
+
+        # Step 4: Compile complete essay (both visual and audio versions)
         essay, audio_essay = self._compile_essay(
             query=query,
             introduction=introduction,
@@ -70,13 +91,79 @@ class SummarizerAgent(BaseAgent):
             analyses=analyses
         )
 
-        # Step 4: Save essay to file
+        # LAYER 3: Quality Scoring Assessment
+        print(f"\n[Summarizer] Assessing essay quality...")
+        quality_result = await self.quality_scorer.score_essay(essay, analyses)
+        quality_score = quality_result["overall_score"]
+
+        if quality_score < MIN_QUALITY_SCORE:
+            if self.regeneration_attempts < MAX_ESSAY_REGENERATION_ATTEMPTS:
+                self.regeneration_attempts += 1
+                print(f"[Summarizer] ⚠️  Quality score {quality_score:.1f} below threshold. Attempting regeneration...")
+                # Recursively regenerate with stricter requirements
+                return await self.run(task)
+            else:
+                error_msg = get_low_quality_essay_error(quality_score, MIN_QUALITY_SCORE, quality_result.get("issues", []))
+                print(f"[Summarizer] ❌ Essay rejected: {error_msg}")
+                raise ValueError(error_msg)
+
+        print(f"[Summarizer] ✓ Quality score: {quality_score:.1f}/10.0")
+
+        # LAYER 4: Citation Verification
+        print(f"[Summarizer] Verifying citations...")
+        citation_result = await self.citation_verifier.verify_citations(essay)
+
+        if not citation_result.is_valid:
+            if self.regeneration_attempts < MAX_ESSAY_REGENERATION_ATTEMPTS:
+                self.regeneration_attempts += 1
+                print(f"[Summarizer] ⚠️  Citation verification failed. Attempting regeneration...")
+                return await self.run(task)
+            else:
+                error_msg = get_citation_verification_failed_error(
+                    len(citation_result.orphan_citations),
+                    len(citation_result.unused_references),
+                    len(citation_result.citation_mismatches)
+                )
+                print(f"[Summarizer] ❌ Essay rejected: {error_msg}")
+                raise ValueError(error_msg)
+
+        print(f"[Summarizer] ✓ Citation verification passed ({citation_result.success_rate*100:.1f}% accuracy)")
+
+        # LAYER 5: Fact-Checking
+        print(f"[Summarizer] Running fact-checking verification...")
+        fact_check_result = await self.fact_checker.verify_essay_claims(essay, analyses)
+
+        if not fact_check_result["is_valid"]:
+            if self.regeneration_attempts < MAX_ESSAY_REGENERATION_ATTEMPTS:
+                self.regeneration_attempts += 1
+                print(f"[Summarizer] ⚠️  Fact-checking failed. Attempting regeneration...")
+                return await self.run(task)
+            else:
+                error_msg = get_fact_check_failed_error(
+                    fact_check_result["supported_percentage"],
+                    0.85
+                )
+                print(f"[Summarizer] ❌ Essay rejected: {error_msg}")
+                raise ValueError(error_msg)
+
+        print(f"[Summarizer] ✓ Fact-checking passed ({fact_check_result['supported_percentage']*100:.1f}% of claims verified)")
+
+        # Step 5: Save essay to file
         file_path = self._save_essay(query, essay)
 
-        # Step 5: Generate metadata
+        # Step 6: Generate metadata
         metadata = self._generate_metadata(essay, analyses)
 
         print(f"[Summarizer] Essay generated: {metadata['word_count']} words, {metadata['citations']} citations")
+
+        # Print success message
+        success_msg = get_success_message(
+            len(analyses),
+            quality_score,
+            metadata['word_count'],
+            metadata['citations']
+        )
+        print(success_msg)
 
         # Initialize RAG vector store immediately
         session_id = self._extract_session_id(file_path)
@@ -90,6 +177,9 @@ class SummarizerAgent(BaseAgent):
             "audio_essay": audio_essay,  # NEW: audio-optimized version
             "file_path": file_path,
             "rag_ready": rag_initialized,  # Signal that RAG is actually initialized
+            "quality_score": quality_score,
+            "citation_accuracy": citation_result.success_rate,
+            "fact_check_score": fact_check_result["supported_percentage"],
             **metadata
         }
 
@@ -171,6 +261,53 @@ class SummarizerAgent(BaseAgent):
             }, indent=2))
 
         print(f"[Summarizer] RAG signal file created: {rag_signal_path}")
+
+    def _build_paper_reference_data(self, analyses: List[Dict[str, Any]]) -> str:
+        """
+        Build a formatted string of paper references from analyses data
+        for injection into essay generation prompts.
+
+        Returns:
+            Formatted reference string with title, authors, year, method, findings, novelty
+        """
+        references = []
+        for i, analysis in enumerate(analyses[:12], 1):  # Cap at 12 papers
+            citations = analysis.get("citations", [])
+            metadata = analysis.get("metadata", {})
+
+            title = "Unknown Title"
+            authors = "Unknown"
+            year = "n.d."
+
+            if citations and len(citations) > 0:
+                citation = citations[0]
+                title = citation.get("title", "Unknown Title")
+                raw_authors = citation.get("authors", "Unknown")
+                raw_year = citation.get("year", "n.d.")
+                if raw_authors and raw_authors != "Information not provided in abstract":
+                    authors = raw_authors
+                if raw_year and raw_year != "Information not provided in abstract":
+                    year = raw_year
+
+            methodology = metadata.get("methodology", analysis.get("summary", "")[:80])
+            key_findings = metadata.get("key_findings", "")
+            novelty = metadata.get("novelty", "")
+
+            if isinstance(key_findings, list):
+                key_findings = "; ".join(key_findings[:2])
+            if isinstance(novelty, list):
+                novelty = "; ".join(novelty[:2])
+
+            ref = f'[{i}] "{title}" - {authors} ({year})'
+            if methodology:
+                ref += f'\n    Method: {str(methodology)[:120]}'
+            if key_findings:
+                ref += f'\n    Key Finding: {str(key_findings)[:150]}'
+            if novelty:
+                ref += f'\n    Novelty: {str(novelty)[:120]}'
+            references.append(ref)
+
+        return "\n\n".join(references) if references else "No paper references available."
 
     async def _create_synthesis(
         self,
@@ -284,61 +421,68 @@ CRITICAL: Every item must be SPECIFIC and SUBSTANTIVE. No generic placeholders."
     async def _generate_introduction(
         self,
         query: str,
-        analyses: List[Dict[str, Any]]
+        analyses: List[Dict[str, Any]],
+        synthesis: Dict[str, Any],
+        paper_references: str
     ) -> str:
-        """Generate essay introduction with Sanguine Vagabond persona"""
+        """Generate essay introduction in academic literature review style"""
         intro_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a highly literate, philosophical essayist with a background in deep tech and political economy. Your prose blends technical proficiency with the gravitas of a classical historian.
+            ("system", """You are a senior research scientist writing a literature review for a peer-reviewed journal.
+Your prose is clear, precise, and evidence-based. Use formal academic English, passive voice
+where appropriate, hedged claims, and specific citations in (Author et al., Year) format.
+Do not use flowery or philosophical language. Be direct, scholarly, and rigorous.
 
-Adopt a 'Sanguine Vagabond' persona—curious, traveled, intellectually satiated. Your tone must be authoritative and sophisticated, yet punctuated with moments of earnest gratitude and awe for human ingenuity.
-
-Your writing style:
-- Use precise, 'high-church' English vocabulary (vicissitudes, precipice, epitomize, efflorescence)
-- Construct long, mellifluous sentences with commas and semi-colons that weave multiple layers
-- Always analyze through a 'macro lens' - paradigm shifts, social contract, systemic impacts
-- Avoid short, choppy sentences
-- Channel the sophistication of Ezra Klein or other distinguished public intellectuals"""),
-            ("user", """WRITE AN OPENING ESSAY for a comprehensive research synthesis.
+CRITICAL ACADEMIC INTEGRITY REQUIREMENTS:
+1. EVERY factual claim MUST be supported by specific citations
+2. Use ONLY information available in the provided paper references
+3. If you cannot find supporting evidence, DO NOT include it
+4. Use hedging language: "suggests", "may indicate", "appears to"
+5. Never extrapolate beyond what papers explicitly state
+6. Citation format MUST be (Author et al., Year) with exact author names
+7. Do not invent or approximate citations
+8. If references are insufficient, state this clearly rather than generating unsupported content"""),
+            ("user", """Write the INTRODUCTION for a literature review on the following topic.
 
 TOPIC: {query}
-PAPERS ANALYZED: {count}
+NUMBER OF PAPERS REVIEWED: {count}
 
-OPENING STRUCTURE (3-4 paragraphs, 400-500 words):
+PAPER REFERENCES (use ONLY these for citations - do not cite papers not in this list):
+{paper_references}
 
-PARAGRAPH 1 - THE HUMAN CONDITION & SIGNIFICANCE:
-- Begin with the profound human questions or existential stakes at play
-- Why does this topic represent a crucial vicissitude in our intellectual or technological journey?
-- Frame the research within broader currents of civilization, innovation, or societal evolution
-- Use evocative yet precise language that captures both wonder and critical analysis
+THEMES IDENTIFIED:
+{themes}
 
-PARAGRAPH 2 - THE INTELLECTUAL LANDSCAPE:
-- Survey the paradigmatic approaches and schools of thought with a historian's eye
-- Identify the intellectual lineages, theoretical frameworks, or methodological efflorescence
-- Note recent inflection points that have shifted the terrain
-- Demonstrate deep familiarity while maintaining narrative momentum
+STRUCTURE (2 paragraphs, 150-250 words total):
 
-PARAGRAPH 3 - SCOPE & INTELLECTUAL VOYAGE:
-- Establish what this synthesis will illuminate and explore
-- Frame the investigation as an intellectual journey through the research landscape
-- Preview the thematic threads with sophisticated prose
-- Set expectations for the depth and breadth of analysis to follow
+PARAGRAPH 1 - RESEARCH CONTEXT AND SIGNIFICANCE:
+- Introduce the research domain and its importance
+- Cite 2-3 specific papers from the references using (Author et al., Year) format
+- Establish the current state of knowledge
+- Use hedging language where appropriate
 
-STYLISTIC REQUIREMENTS:
-- Long, flowing sentences that use semi-colons and commas to build complexity
-- Sophisticated vocabulary that describes complexity and transition
-- No generic academic phrases - be specific and original
-- Demonstrate both technical precision and humanistic perspective
-- Create a sense of intellectual grandeur without pomposity
-- Show genuine appreciation for the ingenuity and effort behind the research
+PARAGRAPH 2 - SCOPE OF THIS REVIEW:
+- State the number of papers reviewed
+- Preview the major themes that will be discussed
+- Briefly outline the structure of the review
 
-Write an opening that would befit a distinguished public intellectual's essay in a premier publication.""")
+CRITICAL REQUIREMENTS:
+- Use formal academic English throughout
+- Include ONLY (Author et al., Year) citations from the provided references
+- Every claim must be traceable to a specific paper
+- Be precise and evidence-based, not philosophical
+- Use hedging language: suggests, may, appears, indicates
+- Keep within 150-250 words
+- NO unsupported assertions""")
         ])
 
         try:
+            themes = synthesis.get("main_themes", [])
             chain = intro_prompt | self.llm
             response = await chain.ainvoke({
                 "query": query,
-                "count": len(analyses)
+                "count": len(analyses),
+                "paper_references": paper_references,
+                "themes": "\n- ".join(themes) if themes else "General research themes"
             })
             return response.content.strip()
         except Exception as e:
@@ -347,85 +491,68 @@ Write an opening that would befit a distinguished public intellectual's essay in
     async def _generate_body(
         self,
         synthesis: Dict[str, Any],
-        analyses: List[Dict[str, Any]]
+        analyses: List[Dict[str, Any]],
+        paper_references: str
     ) -> str:
-        """Generate essay body sections with Sanguine Vagabond persona"""
+        """Generate essay body in academic literature review style with thematic organization"""
         body_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a distinguished essayist and intellectual historian. Your analysis combines deep technical understanding with classical prose.
+            ("system", """You are a senior research scientist writing the body of a literature review for a peer-reviewed journal.
+Organize the review thematically. For each theme, cite specific papers using (Author et al., Year) format.
+Compare and contrast findings across studies. Note methodological differences.
+Use formal academic English, passive voice where appropriate, and hedged claims.
+Do not use flowery or philosophical language. Be direct, scholarly, and analytical.
 
-Embody the 'Sanguine Vagabond' - authoritative, sophisticated, curious about human achievement. Your writing reveals patterns, paradigm shifts, and systemic insights through long, flowing sentences that build layered arguments.
+CRITICAL ACADEMIC INTEGRITY REQUIREMENTS:
+1. EVERY claim about research findings MUST cite specific papers
+2. Use ONLY papers from the provided references - do not reference papers not in the list
+3. When comparing studies, cite each study explicitly
+4. When noting differences, show them with explicit citations
+5. Use hedging language: "suggests", "may indicate", "appears", "indicates"
+6. Do not extrapolate beyond what papers state
+7. Citation format MUST be (Author et al., Year) - match reference list exactly
+8. If you cannot support a claim with provided papers, omit it
+9. For methodological analysis, explicitly compare approaches using citations"""),
+            ("user", """Write the BODY of a literature review.
 
-Write like a premier public intellectual (Ezra Klein, Isaiah Berlin) - technically proficient yet deeply humanistic."""),
-            ("user", """WRITE THE ANALYTICAL BODY of a comprehensive research synthesis.
+PAPER REFERENCES (use ONLY these for citations - do not cite papers not in this list):
+{paper_references}
 
-═══════════════════════════════════════════════════════════
-SYNTHESIS DATA:
+THEMES TO COVER:
+{themes}
 
-Main Themes: {themes}
+KEY FINDINGS:
+{findings}
 
-Key Findings: {findings}
+METHODOLOGIES USED:
+{methodologies}
 
-Methodologies: {methodologies}
+RESEARCH GAPS:
+{gaps}
 
-Research Gaps: {gaps}
+TOP CONTRIBUTIONS:
+{contributions}
 
-Top Contributions: {contributions}
+NUMBER OF PAPERS: {count}
 
-Papers Analyzed: {count}
-═══════════════════════════════════════════════════════════
+STRUCTURE (4-6 paragraphs, 600-900 words total):
 
-BODY STRUCTURE (7-10 paragraphs, 1200-1500 words):
+Organize by theme. For each major theme:
+- Introduce the theme and its relevance to the research question
+- Cite 2-4 specific papers by (Author et al., Year) from the references above
+- Compare and contrast findings across the cited studies with explicit citations
+- Note methodological differences between approaches with citations
+- Synthesize what the collective evidence suggests (with citations)
 
-Organize as a THEMATIC INTELLECTUAL NARRATIVE. For each major theme:
-
-1. INTRODUCE WITH SYSTEMIC FRAMING:
-   - Position the theme within broader paradigmatic shifts or epistemological currents
-   - Explain its significance to the human condition, social contract, or technological evolution
-   - Use the 'macro lens' - how does this theme epitomize larger patterns?
-
-2. SYNTHESIZE WITH FLOWING PROSE:
-   - Weave findings from multiple sources into coherent narrative threads
-   - Use long sentences with semi-colons and commas to build complex arguments
-   - Compare approaches with sophisticated transitions ("Moreover," "Nevertheless," "In this light,")
-   - Highlight consensus and productive tensions
-
-3. ANALYZE CRITICALLY WITH DEPTH:
-   - Evaluate methodological approaches with intellectual rigor
-   - Discuss implications for theory, practice, and society
-   - Identify what these findings reveal about broader intellectual or civilizational questions
-   - Note patterns, inflection points, and paradigmatic vicissitudes
-
-4. MAINTAIN NARRATIVE MOMENTUM:
-   - Use elegant transitions that connect themes organically
-   - Build toward larger insights about the field's trajectory
-   - Create a sense of intellectual journey and discovery
-
-STYLISTIC IMPERATIVES:
-
-VOCABULARY:
-- Use precise, sophisticated terminology (vicissitudes, precipice, epitomize, efflorescence, paradigm, inflection point)
-- Avoid generic academic phrases
-- Choose words that convey complexity, transition, and significance
-
-SENTENCE STRUCTURE:
-- Long, mellifluous sentences that use commas and semi-colons
-- Weave multiple clauses into unified arguments
-- Avoid short, choppy sentences
-- Create rhythm and flow
-
-ANALYTICAL DEPTH:
-- Always seek the macro lens - paradigm shifts, social contract implications, systemic patterns
-- Connect technical findings to humanistic concerns
-- Show appreciation for human ingenuity while maintaining critical distance
-- Identify what research reveals about civilization, progress, or intellectual evolution
-
-INTEGRATION:
-- Don't list findings - synthesize into coherent narrative
-- Compare and contrast with sophisticated prose
-- Build toward larger insights
-- Demonstrate deep understanding
-
-Write body paragraphs that demonstrate intellectual sophistication, technical mastery, and humanistic perspective - worthy of a premier publication.""")
+CRITICAL REQUIREMENTS:
+- Use formal academic English throughout
+- EVERY claim must reference specific papers with (Author et al., Year) citations
+- Compare and contrast - do not just summarize papers sequentially
+- Note areas of agreement and disagreement with explicit citations
+- Use transitions between themes
+- Use hedging language: suggests, may, appears, indicates
+- All citations must match the provided references exactly
+- Keep within 600-900 words
+- NO unsupported assertions - every claim needs a citation""")
         ])
 
         try:
@@ -436,7 +563,8 @@ Write body paragraphs that demonstrate intellectual sophistication, technical ma
                 "methodologies": "\n- ".join(synthesis.get("methodologies", [])),
                 "gaps": "\n- ".join(synthesis.get("research_gaps", [])),
                 "contributions": "\n- ".join(synthesis.get("top_contributions", [])),
-                "count": len(analyses)
+                "count": len(analyses),
+                "paper_references": paper_references
             })
             return response.content.strip()
         except Exception as e:
@@ -445,19 +573,31 @@ Write body paragraphs that demonstrate intellectual sophistication, technical ma
     async def _generate_conclusion(
         self,
         query: str,
-        synthesis: Dict[str, Any]
+        synthesis: Dict[str, Any],
+        paper_references: str
     ) -> str:
-        """Generate essay conclusion with Sanguine Vagabond persona"""
+        """Generate essay conclusion in academic literature review style"""
         conclusion_prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an accomplished intellectual essayist bringing closure to a sophisticated analysis.
+            ("system", """You are a senior research scientist writing the conclusion of a literature review for a peer-reviewed journal.
+Synthesize the key findings concisely, identify limitations and gaps, and suggest future research directions.
+Use formal academic English. Be precise, evidence-based, and forward-looking.
+Do not use flowery or philosophical language.
 
-As the 'Sanguine Vagabond', synthesize insights with gratitude for human achievement while maintaining critical sophistication. Your conclusion should elevate the discussion, connect to broader civilizational questions, and leave readers with profound insights.
+CRITICAL ACADEMIC INTEGRITY REQUIREMENTS:
+1. All major findings cited in synthesis MUST reference specific papers
+2. Limitations MUST be tied to specific studies or gaps in the literature
+3. Future research suggestions MUST connect explicitly to identified gaps
+4. Use ONLY papers from the provided references
+5. Use hedging language: "suggests", "may", "appears", "indicates"
+6. Do not make claims unsupported by the reviewed literature
+7. Citation format MUST be (Author et al., Year)
+8. Acknowledge what the current literature can and cannot conclude"""),
+            ("user", """Write the CONCLUSION for a literature review.
 
-Write with the gravitas and eloquence of a premier public intellectual."""),
-            ("user", """WRITE A POWERFUL CONCLUSION for this research synthesis.
-
-═══════════════════════════════════════════════════════════
 TOPIC: {query}
+
+PAPER REFERENCES (use ONLY these for citations):
+{paper_references}
 
 KEY THEMES: {themes}
 
@@ -466,44 +606,35 @@ MAIN CONTRIBUTIONS: {contributions}
 RESEARCH GAPS: {gaps}
 
 METHODOLOGIES REVIEWED: {methodologies}
-═══════════════════════════════════════════════════════════
 
-CONCLUSION STRUCTURE (3-4 paragraphs, 400-500 words):
+STRUCTURE (2-3 paragraphs, 200-350 words total):
 
-PARAGRAPH 1 - SYNTHESIS AT THE MACRO LEVEL:
-- Elevate findings to reveal overarching patterns and paradigmatic shifts
-- What do these insights collectively tell us about intellectual evolution, human progress, or systemic change?
-- Use long, flowing sentences that weave multiple insights together
-- Show both the technical achievement and humanistic significance
+PARAGRAPH 1 - SYNTHESIS OF KEY FINDINGS:
+- Summarize the 3-4 most significant findings from the reviewed literature
+- Reference specific papers where appropriate using (Author et al., Year)
+- State what the collective evidence demonstrates
+- Acknowledge limitations of current evidence
 
-PARAGRAPH 2 - CIVILIZATIONAL & SYSTEMIC IMPLICATIONS:
-- How do these findings shift paradigms, inform the social contract, or alter our understanding?
-- What are the implications for society, technology, policy, or human flourishing?
-- Connect technical findings to broader questions of human civilization
-- Demonstrate both critical analysis and appreciation for ingenuity
+PARAGRAPH 2 - LIMITATIONS AND GAPS:
+- Identify methodological limitations across the reviewed studies with citations
+- Note gaps in the current body of knowledge
+- Connect gaps to specific missing studies or methodologies
+- Be specific about what remains unknown or understudied
 
-PARAGRAPH 3 - THE HORIZON OF INQUIRY:
-- What intellectual vicissitudes lie ahead?
-- Where do the most promising avenues of investigation lead?
-- What unanswered questions beckon further exploration?
-- Frame future directions as part of humanity's ongoing intellectual journey
+PARAGRAPH 3 (OPTIONAL) - FUTURE RESEARCH DIRECTIONS:
+- Suggest concrete directions for future investigation
+- Connect suggestions explicitly to the identified gaps
+- Base suggestions on limitations found in reviewed papers
+- Be specific and actionable
 
-OPTIONAL PARAGRAPH 4 - THE BROADER VISTA:
-- Step back to the widest lens - what does this body of work mean for human understanding?
-- Connect to interdisciplinary concerns, philosophical questions, or civilizational challenges
-- End with a memorable insight that captures both wonder and wisdom
-- Leave readers with a sense of intellectual satisfaction and renewed curiosity
-
-STYLISTIC REQUIREMENTS:
-
-- Long, sophisticated sentences using semi-colons and commas
-- High-church vocabulary (vicissitudes, precipice, efflorescence, paradigm)
-- Macro lens framing (systemic, paradigmatic, civilizational)
-- Balance critical rigor with genuine appreciation for human achievement
-- Create sense of intellectual closure while opening new horizons
-- End on a note of both gravitas and optimism
-
-Write a conclusion that befits a distinguished essay in a premier intellectual publication - technically precise, humanistically profound, and beautifully written.""")
+CRITICAL REQUIREMENTS:
+- Use formal academic English
+- Keep within 200-350 words
+- Be concise and substantive
+- Every major finding must have a citation
+- End with a clear forward-looking statement grounded in literature
+- Use hedging language: suggests, may, appears, indicates
+- NO unsupported assertions""")
         ])
 
         try:
@@ -513,7 +644,8 @@ Write a conclusion that befits a distinguished essay in a premier intellectual p
                 "themes": "\n- ".join(synthesis.get("main_themes", [])),
                 "contributions": "\n- ".join(synthesis.get("top_contributions", [])),
                 "gaps": "\n- ".join(synthesis.get("research_gaps", [])),
-                "methodologies": "\n- ".join(synthesis.get("methodologies", []))
+                "methodologies": "\n- ".join(synthesis.get("methodologies", [])),
+                "paper_references": paper_references
             })
             return response.content.strip()
         except Exception as e:
