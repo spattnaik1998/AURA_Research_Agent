@@ -24,7 +24,7 @@ class PaperValidationService:
     # Validation thresholds
     TITLE_MIN_LENGTH = 10
     TITLE_MAX_LENGTH = 500
-    ABSTRACT_MIN_LENGTH = 50
+    ABSTRACT_MIN_LENGTH = 30
     MIN_YEAR = 1950
     MAX_YEAR = datetime.now().year + 1
 

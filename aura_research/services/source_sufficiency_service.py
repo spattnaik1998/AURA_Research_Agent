@@ -35,8 +35,8 @@ class SourceSufficiencyService:
     # Validation level weights
     VALIDATION_LEVEL_WEIGHTS = {
         "full": 1.0,      # Full validation with CrossRef
-        "doi": 0.8,       # DOI verified via CrossRef
-        "basic": 0.5      # Basic metadata only
+        "doi": 0.9,       # DOI verified via CrossRef (increased from 0.8)
+        "basic": 0.7      # Basic metadata only (increased from 0.5)
     }
 
     def __init__(self):
@@ -136,7 +136,11 @@ class SourceSufficiencyService:
             publication_name = pub_info.get("publication", "")
 
             if publication_name and publication_name.strip():
-                venues.add(publication_name.strip())
+                # Normalize venue name (handle arXiv separately)
+                venue = publication_name.strip()
+                if venue.lower().startswith("arxiv"):
+                    venue = "arXiv"
+                venues.add(venue)
                 continue
 
             # Try enriched metadata from validation
@@ -151,7 +155,10 @@ class SourceSufficiencyService:
             if link:
                 try:
                     domain = link.split("/")[2]
-                    if domain not in ["example.com", "unknown"]:
+                    # Normalize arXiv URLs
+                    if "arxiv" in domain.lower():
+                        venues.add("arXiv")
+                    elif domain not in ["example.com", "unknown"]:
                         venues.add(domain)
                 except (IndexError, ValueError):
                     pass

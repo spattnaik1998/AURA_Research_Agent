@@ -2,6 +2,50 @@
 User-friendly error messages for AURA quality control system
 """
 
+
+def get_non_academic_query_error(query: str, category: str, reasoning: str) -> str:
+    """Generate error message for non-academic queries"""
+    return f"""
+❌ Non-Academic Query Detected
+{'='*60}
+
+Your query: "{query}"
+Detected category: {category}
+
+{reasoning}
+
+AURA is designed for academic research topics such as:
+  • Scientific concepts (e.g., "quantum entanglement", "photosynthesis")
+  • Research methodologies (e.g., "reinforcement learning", "CRISPR")
+  • Biological/medical topics (e.g., "mitochondrial function", "immunology")
+  • Engineering & CS topics (e.g., "neural networks", "algorithms")
+  • Mathematical concepts (e.g., "calculus", "linear algebra")
+  • Peer-reviewed research areas
+
+Examples of Academic Queries (✓ Will Work):
+  ✓ "Transformer architecture in natural language processing"
+  ✓ "CRISPR gene editing mechanisms and off-target effects"
+  ✓ "Attention mechanisms in neural networks"
+  ✓ "Mitochondrial dysfunction in aging"
+  ✓ "Reinforcement learning with human feedback"
+
+Examples of Non-Academic Queries (✗ Will Not Work):
+  ✗ "Tom Cruise filmography"
+  ✗ "Isaac Asimov biography"
+  ✗ "Best pizza in New York"
+  ✗ "iPhone 15 features and reviews"
+  ✗ "Tesla stock price"
+
+If you believe this is an academic topic, try rephrasing to be more
+specific about the research aspect. For example:
+  • Instead of "Tom Cruise" → "Actor biographies in cinema"
+  • Instead of "Isaac Asimov" → "Science fiction as prediction"
+  • Instead of "Best pizza" → "Flour fermentation in bread baking"
+
+{'='*60}
+"""
+
+
 def get_insufficient_papers_error(count: int, required: int) -> str:
     """Generate error for insufficient papers"""
     return f"""

@@ -15,6 +15,7 @@ from .subordinate_agent import SubordinateAgent
 from ..utils.config import SERPER_API_KEY, MAX_SUBORDINATE_AGENTS, BATCH_SIZE, ALLOW_MOCK_DATA
 from ..services.paper_validation_service import PaperValidationService
 from ..services.source_sufficiency_service import SourceSufficiencyService
+from ..services.topic_classification_service import TopicClassificationService
 import json
 import os
 
@@ -68,6 +69,7 @@ class SupervisorAgent(BaseAgent):
         self.subordinate_results: List[Dict[str, Any]] = []
         self.paper_validator = PaperValidationService()
         self.sufficiency_checker = SourceSufficiencyService()
+        self.topic_classifier = TopicClassificationService()
 
     async def run(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -83,6 +85,22 @@ class SupervisorAgent(BaseAgent):
 
         if not query:
             raise ValueError("No research query provided")
+
+        # Step 0: Topic Classification (Layer 0)
+        logger.info(f"Classifying query: {query}")
+        classification = await self.topic_classifier.classify_query(query)
+
+        if not classification.is_academic:
+            from ..utils.error_messages import get_non_academic_query_error
+            error_msg = get_non_academic_query_error(
+                query,
+                classification.category,
+                classification.reasoning
+            )
+            logger.warning(f"Non-academic query rejected: {classification.category}")
+            raise ValueError(error_msg)
+
+        logger.info(f"Query classified as academic (confidence: {classification.confidence:.2f})")
 
         # Step 1: Fetch research papers
         logger.info(f"Fetching papers for query: {query}")
@@ -204,6 +222,14 @@ class SupervisorAgent(BaseAgent):
             valid_papers, validation_results = await self.paper_validator.validate_papers(papers)
             logger.info(f"Validation complete: {len(valid_papers)} valid papers")
 
+            # Detailed validation logging
+            count_full = sum(1 for r in validation_results if r.get("validation_level") == "full")
+            count_doi = sum(1 for r in validation_results if r.get("validation_level") == "doi")
+            count_basic = sum(1 for r in validation_results if r.get("validation_level") == "basic")
+            logger.info(f"Validation Results:")
+            logger.info(f"  - Total: {len(papers)}, Valid: {len(valid_papers)}")
+            logger.info(f"  - Full validation: {count_full}, DOI: {count_doi}, Basic: {count_basic}")
+
             # Check source sufficiency (Layer 2)
             sufficiency = self.sufficiency_checker.check_sufficiency(papers, validation_results)
 
@@ -214,7 +240,12 @@ class SupervisorAgent(BaseAgent):
                 logger.error(f"Insufficient sources: {error_msg}")
                 raise ValueError(error_msg)
 
-            logger.info(f"Source sufficiency check passed. Effective score: {sufficiency.effective_count:.2f}")
+            # Detailed sufficiency logging
+            logger.info(f"Source Sufficiency Metrics:")
+            logger.info(f"  - Effective count: {sufficiency.effective_count:.2f}/{self.sufficiency_checker.MIN_EFFECTIVE_COUNT}")
+            logger.info(f"  - Unique venues: {sufficiency.venue_count}/{self.sufficiency_checker.MIN_UNIQUE_VENUES}")
+            logger.info(f"  - Recent papers (5y): {sufficiency.recent_papers_count}/{self.sufficiency_checker.MIN_RECENT_PAPERS}")
+            logger.info(f"Source sufficiency check passed.")
 
             return valid_papers
 
