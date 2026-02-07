@@ -31,13 +31,17 @@ class RAGChatbot:
 
     def __init__(self, session_id: str):
         """
-        Initialize RAG chatbot
+        Initialize RAG chatbot with graceful fallback.
+
+        If vector store fails, will still initialize using FallbackChatbot.
 
         Args:
             session_id: Research session ID for vector store
         """
         self.session_id = session_id
         self.vector_store_manager = VectorStoreManager()
+        self.use_fallback = False
+        self.fallback_chatbot = None
 
         # Initialize vector store with detailed error messages
         print(f"[RAGChatbot] Attempting to initialize for session: {session_id}")
@@ -52,16 +56,9 @@ class RAGChatbot:
             if self.vector_store_manager.initialize_from_session(session_id):
                 print(f"[RAGChatbot] ✅ Created new vector store for session {session_id}")
             else:
-                error_msg = (
-                    f"Could not initialize RAG chatbot for session '{session_id}'.\n"
-                    f"Possible causes:\n"
-                    f"1. Research session data not found (check aura_research/storage/analysis/)\n"
-                    f"2. No analyses in session data\n"
-                    f"3. Vector store creation failed\n"
-                    f"Please ensure the research session completed successfully."
-                )
-                print(f"[RAGChatbot] ❌ {error_msg}")
-                raise ValueError(error_msg)
+                # Vector store failed - initialize fallback instead
+                print(f"[RAGChatbot] ⚠️  Vector store initialization failed. Initializing fallback chatbot...")
+                self.use_fallback = True
 
         # Initialize LLM
         self.llm = ChatOpenAI(
@@ -73,10 +70,43 @@ class RAGChatbot:
         # Initialize memory
         self.memory = MemorySaver()
 
-        # Build LangGraph workflow
-        self.graph = self._build_graph()
+        # If using fallback, initialize it with papers
+        if self.use_fallback:
+            from .fallback_chatbot import FallbackChatbot
+            papers = self._load_papers_for_session(session_id)
+            self.fallback_chatbot = FallbackChatbot(session_id, papers)
+            print(f"[RAGChatbot] ✅ Fallback chatbot initialized with {len(papers)} papers")
+        else:
+            # Build normal LangGraph workflow
+            self.graph = self._build_graph()
+            print(f"[RAGChatbot] ✅ Fully initialized for session: {session_id}")
 
-        print(f"[RAGChatbot] ✅ Fully initialized for session: {session_id}")
+    def _load_papers_for_session(self, session_id: str):
+        """
+        Load papers for a research session.
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            List of papers, empty list if not found
+        """
+        import json
+        from ..utils.config import ANALYSIS_DIR
+
+        analysis_file = ANALYSIS_DIR / f"research_{session_id}.json"
+
+        try:
+            if analysis_file.exists():
+                with open(analysis_file, 'r') as f:
+                    data = json.load(f)
+                    papers = data.get("papers", [])
+                    print(f"[RAGChatbot] Loaded {len(papers)} papers from session data")
+                    return papers
+        except Exception as e:
+            print(f"[RAGChatbot] Error loading papers: {e}")
+
+        return []
 
     def _build_graph(self) -> StateGraph:
         """
@@ -217,7 +247,10 @@ Context from research:
         language: str = "English"
     ) -> Dict[str, Any]:
         """
-        Process chat message and return response
+        Process chat message and return response.
+
+        If using fallback mode, delegates to FallbackChatbot.
+        Otherwise, uses normal RAG pipeline.
 
         Args:
             message: User message
@@ -227,6 +260,11 @@ Context from research:
         Returns:
             Response dictionary
         """
+        # If using fallback, delegate to fallback chatbot
+        if self.use_fallback:
+            return await self.fallback_chatbot.chat(message, conversation_id, language)
+
+        # Normal RAG pipeline
         # Create initial state
         initial_state: ChatState = {
             "messages": [HumanMessage(content=message)],
@@ -251,12 +289,15 @@ Context from research:
             "response": final_state["response"],
             "context_used": final_state["context"],
             "conversation_id": conversation_id or "default",
-            "session_id": self.session_id
+            "session_id": self.session_id,
+            "fallback_mode": False
         }
 
     def get_conversation_history(self, conversation_id: str = "default") -> List[Dict[str, str]]:
         """
-        Get conversation history
+        Get conversation history.
+
+        Works with both normal and fallback modes.
 
         Args:
             conversation_id: Conversation ID
@@ -264,6 +305,11 @@ Context from research:
         Returns:
             List of message dictionaries
         """
+        # If using fallback, get history from fallback chatbot
+        if self.use_fallback:
+            return self.fallback_chatbot.get_conversation_history(conversation_id)
+
+        # Normal mode
         try:
             config = {"configurable": {"thread_id": conversation_id}}
             state = self.memory.get(config)
