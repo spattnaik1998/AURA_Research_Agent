@@ -6,6 +6,12 @@ Validates that essay sources meet minimum quality and quantity requirements
 import logging
 from typing import Dict, Any, List, Set
 from dataclasses import dataclass
+from ..utils.config import (
+    MIN_VALID_PAPERS,
+    MIN_UNIQUE_VENUES,
+    MIN_RECENT_PAPERS,
+    MIN_EFFECTIVE_COUNT
+)
 
 logger = logging.getLogger('aura.services')
 
@@ -26,12 +32,6 @@ class SufficiencyResult:
 class SourceSufficiencyService:
     """Validates source sufficiency for essay generation"""
 
-    # Minimum requirements
-    MIN_VALID_PAPERS = 5
-    MIN_UNIQUE_VENUES = 3
-    MIN_RECENT_PAPERS = 2  # Within last 5 years
-    MIN_EFFECTIVE_COUNT = 4.0  # Weighted sum
-
     # Validation level weights
     VALIDATION_LEVEL_WEIGHTS = {
         "full": 1.0,      # Full validation with CrossRef
@@ -40,8 +40,12 @@ class SourceSufficiencyService:
     }
 
     def __init__(self):
-        """Initialize sufficiency service"""
-        pass
+        """Initialize sufficiency service with config thresholds"""
+        self.MIN_VALID_PAPERS = MIN_VALID_PAPERS
+        self.MIN_UNIQUE_VENUES = MIN_UNIQUE_VENUES
+        self.MIN_RECENT_PAPERS = MIN_RECENT_PAPERS
+        self.MIN_EFFECTIVE_COUNT = MIN_EFFECTIVE_COUNT
+        logger.debug(f"Loaded thresholds: papers={self.MIN_VALID_PAPERS}, venues={self.MIN_UNIQUE_VENUES}, recent={self.MIN_RECENT_PAPERS}, effective={self.MIN_EFFECTIVE_COUNT}")
 
     def check_sufficiency(
         self,
@@ -131,6 +135,22 @@ class SourceSufficiencyService:
         venues = set()
 
         for paper in valid_papers:
+            # Special handling for Tavily sources
+            if paper.get("_source") == "tavily":
+                # Use the link domain as venue for web sources
+                link = paper.get("link", "")
+                if link:
+                    try:
+                        from urllib.parse import urlparse
+                        domain = urlparse(link).netloc
+                        # Remove www. prefix
+                        domain = domain.replace("www.", "")
+                        if domain:
+                            venues.add(f"Web: {domain}")
+                    except Exception:
+                        venues.add("Web: Unknown")
+                continue
+
             # Try publication info from Serper API
             pub_info = paper.get("publication_info", {})
             publication_name = pub_info.get("publication", "")

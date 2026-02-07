@@ -12,10 +12,11 @@ import time
 from functools import wraps
 from .base_agent import BaseAgent, AgentStatus
 from .subordinate_agent import SubordinateAgent
-from ..utils.config import SERPER_API_KEY, MAX_SUBORDINATE_AGENTS, BATCH_SIZE, ALLOW_MOCK_DATA
+from ..utils.config import SERPER_API_KEY, TAVILY_API_KEY, MAX_SUBORDINATE_AGENTS, BATCH_SIZE, ALLOW_MOCK_DATA
 from ..services.paper_validation_service import PaperValidationService
 from ..services.source_sufficiency_service import SourceSufficiencyService
 from ..services.topic_classification_service import TopicClassificationService
+from tavily import TavilyClient
 import json
 import os
 
@@ -191,9 +192,85 @@ class SupervisorAgent(BaseAgent):
         logger.info(f"Successfully fetched {len(papers)} papers from Serper API")
         return papers
 
+    @retry_with_backoff(retries=3, backoff_factor=2.0)
+    async def _fetch_papers_tavily(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Fetch papers from Tavily API as fallback.
+
+        Tavily provides general web search, not academic papers,
+        so results are marked with _source='tavily' for special handling.
+
+        Args:
+            query: Search query
+
+        Returns:
+            List of paper metadata in AURA format
+
+        Raises:
+            Exception: If Tavily API fails
+        """
+        logger.info(f"Fetching from Tavily API as fallback for query: {query}")
+
+        try:
+            # Initialize Tavily client
+            tavily = TavilyClient(api_key=TAVILY_API_KEY)
+
+            # Run sync request in thread pool
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: tavily.search(
+                    query=f"{query} research paper academic",  # Add academic context
+                    max_results=20,
+                    topic="general",
+                    include_answer=False,
+                    include_raw_content=False
+                )
+            )
+
+            # Transform Tavily results to AURA format
+            papers = []
+            for item in result.get("results", []):
+                # Only include results that look like academic papers
+                url = item.get("url", "")
+                title = item.get("title", "")
+
+                # Filter for academic domains
+                is_academic = any(domain in url.lower() for domain in [
+                    'arxiv.org', 'scholar.google', 'doi.org', 'researchgate',
+                    'semanticscholar.org', 'pubmed', 'acm.org', 'ieee.org',
+                    '.edu/', 'sciencedirect', 'springer', 'wiley', 'nature.com'
+                ])
+
+                if is_academic or len(title) > 50:  # Academic titles tend to be descriptive
+                    papers.append({
+                        "title": title,
+                        "snippet": item.get("content", "")[:500],  # Limit snippet length
+                        "link": url,
+                        "publication_info": {
+                            # Mark as web source to signal relaxed validation
+                            "publication": "Web Source (Tavily)",
+                            "publicationDate": "",
+                            "authors": ""
+                        },
+                        "cited_by": {
+                            # Use relevance score as proxy (scale 0-1 to 0-100)
+                            "total": int(item.get("score", 0.5) * 100)
+                        },
+                        "_source": "tavily",  # Mark for special handling
+                        "_relevance_score": item.get("score", 0.0)
+                    })
+
+            logger.info(f"Tavily returned {len(papers)} results (filtered from {len(result.get('results', []))})")
+            return papers
+
+        except Exception as e:
+            logger.error(f"Tavily API error: {str(e)}")
+            raise
+
     async def _fetch_papers(self, query: str) -> List[Dict[str, Any]]:
         """
-        Fetch and validate research papers using Serper API with NO fallback.
+        Fetch and validate research papers using Serper API with Tavily fallback.
 
         Args:
             query: Search query
@@ -202,60 +279,74 @@ class SupervisorAgent(BaseAgent):
             List of validated paper metadata
 
         Raises:
-            ValueError: If papers cannot be fetched or validated
+            ValueError: If both APIs fail or papers cannot be validated
         """
         logger.info(f"Fetching papers for query: {query}")
 
+        papers = None
+        serper_error = None
+
+        # Try Serper first (Google Scholar - academic papers)
         try:
-            # Fetch from Serper API
             papers = await self._fetch_papers_api(query)
 
             if not papers:
-                raise ValueError(
-                    "No papers found. Your search query returned no results. "
-                    "Please try different keywords or a broader search term."
-                )
+                raise ValueError("No papers found from Serper API")
 
-            logger.info(f"Fetched {len(papers)} papers from Serper API")
-
-            # Validate papers (Layer 1)
-            valid_papers, validation_results = await self.paper_validator.validate_papers(papers)
-            logger.info(f"Validation complete: {len(valid_papers)} valid papers")
-
-            # Detailed validation logging
-            count_full = sum(1 for r in validation_results if r.get("validation_level") == "full")
-            count_doi = sum(1 for r in validation_results if r.get("validation_level") == "doi")
-            count_basic = sum(1 for r in validation_results if r.get("validation_level") == "basic")
-            logger.info(f"Validation Results:")
-            logger.info(f"  - Total: {len(papers)}, Valid: {len(valid_papers)}")
-            logger.info(f"  - Full validation: {count_full}, DOI: {count_doi}, Basic: {count_basic}")
-
-            # Check source sufficiency (Layer 2)
-            sufficiency = self.sufficiency_checker.check_sufficiency(papers, validation_results)
-
-            if not sufficiency.is_sufficient:
-                # Generate detailed error message
-                from ..utils.error_messages import get_insufficient_papers_error
-                error_msg = self.sufficiency_checker.get_sufficiency_error_message(sufficiency)
-                logger.error(f"Insufficient sources: {error_msg}")
-                raise ValueError(error_msg)
-
-            # Detailed sufficiency logging
-            logger.info(f"Source Sufficiency Metrics:")
-            logger.info(f"  - Effective count: {sufficiency.effective_count:.2f}/{self.sufficiency_checker.MIN_EFFECTIVE_COUNT}")
-            logger.info(f"  - Unique venues: {sufficiency.venue_count}/{self.sufficiency_checker.MIN_UNIQUE_VENUES}")
-            logger.info(f"  - Recent papers (5y): {sufficiency.recent_papers_count}/{self.sufficiency_checker.MIN_RECENT_PAPERS}")
-            logger.info(f"Source sufficiency check passed.")
-
-            return valid_papers
+            logger.info(f"✓ Fetched {len(papers)} papers from Serper API (Google Scholar)")
 
         except Exception as e:
-            logger.error(f"Paper fetching/validation failed: {str(e)}")
-            # Do NOT fall back to mock data
-            raise ValueError(
-                f"Unable to fetch and validate academic papers: {str(e)}\n"
-                f"No mock data will be generated. Please check your query and try again."
-            )
+            serper_error = str(e)
+            logger.warning(f"Serper API failed: {serper_error}")
+            logger.info("Attempting Tavily fallback...")
+
+            # Fallback to Tavily (general web search)
+            try:
+                papers = await self._fetch_papers_tavily(query)
+
+                if not papers:
+                    raise ValueError("No papers found from Tavily API")
+
+                logger.info(f"✓ Fetched {len(papers)} papers from Tavily API (fallback)")
+
+            except Exception as tavily_error:
+                # Both APIs failed
+                logger.error(f"Both APIs failed. Serper: {serper_error}, Tavily: {tavily_error}")
+                raise ValueError(
+                    f"Unable to fetch papers from any source:\n"
+                    f"  - Serper API: {serper_error}\n"
+                    f"  - Tavily API: {tavily_error}\n"
+                    f"Please check your API keys and try again."
+                )
+
+        # Validate papers (Layer 1)
+        valid_papers, validation_results = await self.paper_validator.validate_papers(papers)
+        logger.info(f"Validation complete: {len(valid_papers)} valid papers")
+
+        # Log validation details
+        count_full = sum(1 for r in validation_results if r.get("validation_level") == "full")
+        count_doi = sum(1 for r in validation_results if r.get("validation_level") == "doi")
+        count_basic = sum(1 for r in validation_results if r.get("validation_level") == "basic")
+        logger.info(f"Validation Results:")
+        logger.info(f"  - Total: {len(papers)}, Valid: {len(valid_papers)}")
+        logger.info(f"  - Full validation: {count_full}, DOI: {count_doi}, Basic: {count_basic}")
+
+        # Check source sufficiency (Layer 2)
+        sufficiency = self.sufficiency_checker.check_sufficiency(papers, validation_results)
+
+        if not sufficiency.is_sufficient:
+            error_msg = self.sufficiency_checker.get_sufficiency_error_message(sufficiency)
+            logger.error(f"Insufficient sources: {error_msg}")
+            raise ValueError(error_msg)
+
+        # Log sufficiency details
+        logger.info(f"Source Sufficiency Metrics:")
+        logger.info(f"  - Effective count: {sufficiency.effective_count:.2f}/{self.sufficiency_checker.MIN_EFFECTIVE_COUNT}")
+        logger.info(f"  - Unique venues: {sufficiency.venue_count}/{self.sufficiency_checker.MIN_UNIQUE_VENUES}")
+        logger.info(f"  - Recent papers (5y): {sufficiency.recent_papers_count}/{self.sufficiency_checker.MIN_RECENT_PAPERS}")
+        logger.info(f"✓ Source sufficiency check passed")
+
+        return valid_papers
 
     async def _categorize_papers(self, papers: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

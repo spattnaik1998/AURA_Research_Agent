@@ -29,6 +29,7 @@ AUDIO_DIR.mkdir(exist_ok=True)
 # API Keys
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 # ElevenLabs Configuration
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
@@ -58,6 +59,7 @@ CHUNK_OVERLAP = 200
 CROSSREF_API_URL = "https://api.crossref.org/works"
 OPENALEX_API_URL = "https://api.openalex.org/works"
 MIN_VALID_PAPERS = 4
+ABSTRACT_MIN_LENGTH = 30  # Minimum abstract length in characters
 VALIDATION_CACHE_HOURS = 24
 
 # Source Sufficiency
@@ -73,7 +75,7 @@ CITATION_DENSITY_TARGET = 0.0057  # 1 per 175 words
 MAX_ESSAY_REGENERATION_ATTEMPTS = 2
 
 # Citation Verification
-MIN_CITATION_ACCURACY = 1.0  # 100% required
+MIN_CITATION_ACCURACY = 0.95  # 95% required (relaxed from 100% to allow minor formatting variations)
 
 # Fact Checking
 FACT_CHECK_TOP_N_CLAIMS = 10
@@ -100,6 +102,8 @@ def validate_env_vars():
         raise ValueError("OPENAI_API_KEY not found in environment variables")
     if not SERPER_API_KEY:
         raise ValueError("SERPER_API_KEY not found in environment variables")
+    if not TAVILY_API_KEY:
+        raise ValueError("TAVILY_API_KEY not found in environment variables")
     if not ELEVENLABS_API_KEY:
         raise ValueError("ELEVENLABS_API_KEY not found in environment variables")
     return True

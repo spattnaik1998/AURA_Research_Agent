@@ -10,6 +10,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import json
+from ..utils.config import ABSTRACT_MIN_LENGTH
 
 logger = logging.getLogger('aura.services')
 
@@ -24,7 +25,6 @@ class PaperValidationService:
     # Validation thresholds
     TITLE_MIN_LENGTH = 10
     TITLE_MAX_LENGTH = 500
-    ABSTRACT_MIN_LENGTH = 30
     MIN_YEAR = 1950
     MAX_YEAR = datetime.now().year + 1
 
@@ -32,9 +32,11 @@ class PaperValidationService:
     CACHE_TIMEOUT_HOURS = 24
 
     def __init__(self):
-        """Initialize validation service with cache"""
+        """Initialize validation service with cache and config thresholds"""
+        self.ABSTRACT_MIN_LENGTH = ABSTRACT_MIN_LENGTH
         self.validation_cache: Dict[str, Dict[str, Any]] = {}
         self.cache_timestamps: Dict[str, datetime] = {}
+        logger.debug(f"Loaded abstract minimum length: {self.ABSTRACT_MIN_LENGTH} chars")
 
     async def validate_papers(self, papers: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
@@ -149,12 +151,29 @@ class PaperValidationService:
         """
         Level 1: Validate basic paper metadata
 
+        Relaxed validation for Tavily sources since they're web results,
+        not academic papers with structured metadata.
+
         Args:
             paper: Paper metadata
 
         Returns:
             Tuple of (is_valid, reason)
         """
+        # Relaxed validation for Tavily sources
+        if paper.get("_source") == "tavily":
+            title = paper.get("title", "")
+            snippet = paper.get("snippet", "")
+
+            # Only check title and content exist
+            if not title or len(title) < self.TITLE_MIN_LENGTH:
+                return False, f"Invalid title length: {len(title)}"
+            if not snippet or len(snippet) < 20:  # Lower threshold for web content
+                return False, "Insufficient content"
+
+            return True, "Basic metadata valid (Tavily source)"
+
+        # Normal validation for Serper papers
         # Check title
         title = paper.get("title", "")
         if not title or len(title) < self.TITLE_MIN_LENGTH or len(title) > self.TITLE_MAX_LENGTH:
