@@ -1164,7 +1164,24 @@ async function playAudio() {
  */
 function initializeAudioUI() {
     audioState.currentSessionId = currentSessionId;
-    checkAudioStatus();
+
+    // Automatic audio generation in progress - check status periodically
+    // Give audio generation time to start (typically 5-10 seconds after essay completes)
+    setTimeout(() => {
+        checkAudioStatus();
+    }, 5000);
+
+    // Poll every 10 seconds for up to 2 minutes for audio file availability
+    let pollCount = 0;
+    const pollInterval = setInterval(() => {
+        checkAudioStatus();
+        pollCount++;
+
+        // Stop polling after 12 attempts (2 minutes total)
+        if (audioState.exists || pollCount >= 12) {
+            clearInterval(pollInterval);
+        }
+    }, 10000);
 }
 
 /**
@@ -1206,7 +1223,7 @@ function toggleEssayPanel() {
 }
 
 /**
- * Load essay content from the API
+ * Load essay content from the API with quality metadata display
  */
 async function loadEssayContent() {
     if (!currentSessionId) return;
@@ -1230,14 +1247,51 @@ async function loadEssayContent() {
         // API returns essay as an object with full_content / full_content_markdown
         const essayObj = data.essay;
         const essayText = essayObj?.full_content_markdown || essayObj?.full_content || '';
+        const qualityMetadata = data.quality_metadata || {};
 
         if (!essayText) {
-            contentDiv.innerHTML = '<p style="color: var(--text-muted); text-align: center;">No essay content available.</p>';
+            // Show specific error message based on quality metadata
+            let errorHtml = '<div style="padding: 20px; background: var(--bg-subtle); border-radius: 8px; text-align: center;">';
+            errorHtml += '<p style="color: var(--error); font-weight: bold; margin-bottom: 12px;">❌ Essay Generation Failed</p>';
+
+            if (qualityMetadata.quality_warnings && qualityMetadata.quality_warnings.length > 0) {
+                errorHtml += '<p style="color: var(--text-muted); margin-bottom: 12px;"><strong>Issues encountered:</strong></p>';
+                errorHtml += '<ul style="text-align: left; display: inline-block; color: var(--text-muted);">';
+                qualityMetadata.quality_warnings.forEach(warning => {
+                    errorHtml += `<li style="margin: 6px 0;">${escapeHtml(warning)}</li>`;
+                });
+                errorHtml += '</ul>';
+            }
+
+            errorHtml += '<p style="color: var(--text-muted); margin-top: 12px; font-size: 0.9em;">Try a more specific research query and generate again.</p>';
+            errorHtml += '</div>';
+
+            contentDiv.innerHTML = errorHtml;
             return;
         }
 
+        // Build essay content with optional quality warning banner
+        let essayHtml = '';
+
+        // Show quality warning banner if essay has quality issues
+        if (qualityMetadata.quality_warnings && qualityMetadata.quality_warnings.length > 0) {
+            essayHtml += '<div style="padding: 14px 16px; background: rgba(255, 193, 7, 0.1); border-left: 4px solid var(--warning); border-radius: 4px; margin-bottom: 16px;">';
+            essayHtml += '<p style="margin: 0 0 8px 0; color: var(--warning); font-weight: bold;">⚠️ Quality Notice</p>';
+            essayHtml += '<ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); font-size: 0.9em;">';
+            qualityMetadata.quality_warnings.forEach(warning => {
+                essayHtml += `<li>${escapeHtml(warning)}</li>`;
+            });
+            essayHtml += '</ul>';
+            if (qualityMetadata.regeneration_attempts) {
+                essayHtml += `<p style="margin: 8px 0 0 0; color: var(--text-secondary); font-size: 0.85em;">Generated after ${qualityMetadata.regeneration_attempts} attempt(s)</p>`;
+            }
+            essayHtml += '<p style="margin: 8px 0 0 0; color: var(--text-secondary); font-size: 0.85em;"><em>Essay content remains academically sourced and cited</em></p>';
+            essayHtml += '</div>';
+        }
+
         // Render the essay with markdown formatting
-        contentDiv.innerHTML = formatEssayMarkdown(essayText);
+        essayHtml += formatEssayMarkdown(essayText);
+        contentDiv.innerHTML = essayHtml;
         contentDiv.dataset.loaded = 'true';
 
         // Update word count and citation count

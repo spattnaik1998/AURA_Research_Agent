@@ -85,6 +85,51 @@ def verify_session_access(
     return db_service.verify_session_ownership(session_id, user_id)
 
 
+async def generate_audio_background(
+    session_id: str,
+    audio_content: str,
+    user_id: Optional[int] = None
+) -> None:
+    """
+    Background task to generate audio automatically after essay completion.
+    Runs in the background without blocking the research response.
+
+    Args:
+        session_id: Research session ID
+        audio_content: Essay text to convert to audio
+        user_id: User ID for tracking (optional)
+    """
+    try:
+        import hashlib
+        from pathlib import Path
+
+        if not audio_content or not audio_content.strip():
+            logger.warning(f"No audio content to generate for session {session_id}")
+            return
+
+        # Get audio service
+        audio_service = get_audio_service()
+
+        # Generate content hash for caching
+        content_hash = hashlib.md5(audio_content.encode()).hexdigest()[:8]
+
+        # Generate audio file
+        logger.info(f"Starting background audio generation for session {session_id}...")
+        audio_path = audio_service.generate_audio(audio_content, session_id, content_hash)
+
+        if audio_path:
+            # Save audio metadata to database
+            db_service = get_db_service()
+            db_service.save_audio(session_id, audio_path, user_id)
+            logger.info(f"✓ Audio generated successfully for session {session_id}: {audio_path}")
+        else:
+            logger.warning(f"Audio generation returned no path for session {session_id}")
+
+    except Exception as e:
+        logger.error(f"Background audio generation failed for session {session_id}: {str(e)}", exc_info=True)
+        # Don't fail the research session if audio generation fails - it's a nice-to-have feature
+
+
 class ResearchRequest(BaseModel):
     """Research request model"""
     query: str
@@ -136,7 +181,8 @@ async def run_research_workflow(
     user_id: Optional[int] = None,
     ip_address: Optional[str] = None,
     source_type: str = "text",
-    source_metadata: Optional[Dict[str, Any]] = None
+    source_metadata: Optional[Dict[str, Any]] = None,
+    background_tasks: Optional[BackgroundTasks] = None
 ):
     """
     Run the research workflow in the background with database integration
@@ -148,6 +194,7 @@ async def run_research_workflow(
         ip_address: Client IP address
         source_type: Source of query ('text' or 'image')
         source_metadata: Optional JSON metadata for source
+        background_tasks: FastAPI background tasks for async operations
     """
     db_service = get_db_service()
 
@@ -230,6 +277,17 @@ async def run_research_workflow(
         }
         db_service.save_essay(session_id, essay_data, user_id)
 
+        # Trigger automatic audio generation in background (Phase 3)
+        audio_content = result.get('audio_essay') or result.get('essay')
+        if audio_content and background_tasks:
+            background_tasks.add_task(
+                generate_audio_background,
+                session_id=session_id,
+                audio_content=audio_content,
+                user_id=user_id
+            )
+            logger.info(f"Automatic audio generation queued for session {session_id}")
+
         # Complete the session in database
         db_service.complete_research_session(
             session_code=session_id,
@@ -248,9 +306,27 @@ async def run_research_workflow(
             "word_count": result.get("essay_metadata", {}).get("word_count", 0)
         })
 
+        # Phase 4: Log success metrics for monitoring
+        metrics_logger = logging.getLogger("aura.metrics")
+        metrics_logger.info(
+            f"SUCCESS | session={session_id} | query={query} | "
+            f"quality={result.get('quality_score', 'N/A'):.2f} | "
+            f"citations={result.get('citation_accuracy', 'N/A'):.2f} | "
+            f"facts={result.get('fact_check_score', 'N/A'):.2f} | "
+            f"regen_attempts={result.get('regeneration_attempts', 0)} | "
+            f"word_count={result.get('essay_metadata', {}).get('word_count', 0)}"
+        )
         logger.info(f"Research completed for session {session_id}")
 
     except Exception as e:
+        # Phase 4: Log failure metrics for monitoring
+        metrics_logger = logging.getLogger("aura.metrics")
+        metrics_logger.error(
+            f"FAILURE | session={session_id} | query={query} | "
+            f"error_type={type(e).__name__} | "
+            f"message={str(e)[:100]}"
+        )
+
         # Update status: Failed
         active_sessions[session_id]["status"] = "failed"
         active_sessions[session_id]["error"] = str(e)
@@ -326,7 +402,8 @@ async def start_research(
             user_id,
             ip_address,
             request.source_type,
-            request.source_metadata
+            request.source_metadata,
+            background_tasks
         )
 
         return ResearchResponse(
@@ -515,11 +592,25 @@ async def get_session_details(
     analyses = db_service.get_session_analyses(session_id)
     essay = db_service.get_session_essay(session_id)
 
+    # Extract quality metadata from active session if available
+    quality_metadata = {}
+    if session_id in active_sessions:
+        result = active_sessions[session_id].get("result", {})
+        quality_metadata = {
+            "quality_warnings": result.get("quality_warnings", []),
+            "regeneration_exhausted": result.get("regeneration_exhausted", False),
+            "regeneration_attempts": result.get("regeneration_attempts", 0),
+            "quality_score": result.get("quality_score"),
+            "citation_accuracy": result.get("citation_accuracy"),
+            "fact_check_score": result.get("fact_check_score")
+        }
+
     return {
         "session": session,
         "papers": papers,
         "analyses": analyses,
         "essay": essay,
+        "quality_metadata": quality_metadata,
         "stats": {
             "paper_count": len(papers),
             "analysis_count": len(analyses),

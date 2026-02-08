@@ -85,6 +85,9 @@ class SummarizerAgent(BaseAgent):
         if self.execution_start_time is None:
             self.execution_start_time = time.time()
 
+        # Initialize quality warnings list (used by graceful degradation in validation layers)
+        quality_warnings = []
+
         query = task.get("query", "")
         analyses = task.get("analyses", [])
         subordinate_results = task.get("subordinate_results", [])
@@ -149,19 +152,15 @@ class SummarizerAgent(BaseAgent):
                 # Recursively regenerate with stricter requirements
                 return await self.run(task)
 
-            # Graceful degradation: Time budget exceeded
+            # Graceful degradation: Time budget exceeded - accept with warning instead of failing
             elif elapsed >= GRACEFUL_DEGRADATION_THRESHOLD:
                 self._safe_print(f"[Summarizer] ⚠️  GRACEFUL DEGRADATION: Accepting essay with quality score {quality_score:.1f} (below threshold, time budget exceeded)")
+                quality_warnings.append(f"Quality score {quality_score:.1f} below threshold {MIN_QUALITY_SCORE} (time limit reached)")
 
-            # NEW: Regeneration exhaustion fallback - accept with warning instead of failing
+            # Regeneration exhaustion fallback - accept with warning instead of failing
             elif self.regeneration_attempts >= MAX_ESSAY_REGENERATION_ATTEMPTS:
                 self._safe_print(f"[Summarizer] ⚠️  REGENERATION EXHAUSTED: Accepting essay with quality score {quality_score:.1f} (exceeded max attempts)")
-
-            # Only fail if we somehow don't match above conditions (should not happen)
-            else:
-                error_msg = get_low_quality_essay_error(quality_score, MIN_QUALITY_SCORE, quality_result.get("issues", []))
-                self._safe_print(f"[Summarizer] ❌ Essay rejected: {error_msg}")
-                raise ValueError(error_msg)
+                quality_warnings.append(f"Quality score {quality_score:.1f} below threshold {MIN_QUALITY_SCORE} (regeneration limit reached)")
 
         self._safe_print(f"[Summarizer] ✓ Quality score: {quality_score:.1f}/10.0")
 
@@ -178,23 +177,15 @@ class SummarizerAgent(BaseAgent):
                 self._safe_print(f"[Summarizer] ⚠️  Citation verification failed ({citation_result.success_rate*100:.1f}% accuracy). Regenerating... (attempt {self.regeneration_attempts}/{MAX_ESSAY_REGENERATION_ATTEMPTS}, elapsed: {elapsed:.0f}s)")
                 return await self.run(task)
 
-            # Graceful degradation: Time budget exceeded
+            # Graceful degradation: Time budget exceeded - accept with warning instead of failing
             elif elapsed >= GRACEFUL_DEGRADATION_THRESHOLD:
                 self._safe_print(f"[Summarizer] ⚠️  GRACEFUL DEGRADATION: Accepting essay with citation accuracy {citation_result.success_rate*100:.1f}% (below threshold, time budget exceeded)")
+                quality_warnings.append(f"Citation accuracy {citation_result.success_rate*100:.1f}% below threshold {MIN_CITATION_ACCURACY*100:.0f}% (time limit reached)")
 
-            # NEW: Regeneration exhaustion fallback - accept with warning instead of failing
+            # Regeneration exhaustion fallback - accept with warning instead of failing
             elif self.regeneration_attempts >= MAX_ESSAY_REGENERATION_ATTEMPTS:
                 self._safe_print(f"[Summarizer] ⚠️  REGENERATION EXHAUSTED: Accepting essay with citation accuracy {citation_result.success_rate*100:.1f}% (exceeded max attempts)")
-
-            # Only fail if we somehow don't match above conditions (should not happen)
-            else:
-                error_msg = get_citation_verification_failed_error(
-                    len(citation_result.orphan_citations),
-                    len(citation_result.unused_references),
-                    len(citation_result.citation_mismatches)
-                )
-                self._safe_print(f"[Summarizer] ❌ Essay rejected: {error_msg}")
-                raise ValueError(error_msg)
+                quality_warnings.append(f"Citation accuracy {citation_result.success_rate*100:.1f}% below threshold {MIN_CITATION_ACCURACY*100:.0f}% (regeneration limit reached)")
 
         self._safe_print(f"[Summarizer] ✓ Citation verification passed ({citation_result.success_rate*100:.1f}% accuracy)")
 
@@ -211,22 +202,15 @@ class SummarizerAgent(BaseAgent):
                 self._safe_print(f"[Summarizer] ⚠️  Fact-checking failed ({fact_check_result['supported_percentage']*100:.1f}% claims verified). Regenerating... (attempt {self.regeneration_attempts}/{MAX_ESSAY_REGENERATION_ATTEMPTS}, elapsed: {elapsed:.0f}s)")
                 return await self.run(task)
 
-            # Graceful degradation: Time budget exceeded
+            # Graceful degradation: Time budget exceeded - accept with warning instead of failing
             elif elapsed >= GRACEFUL_DEGRADATION_THRESHOLD:
                 self._safe_print(f"[Summarizer] ⚠️  GRACEFUL DEGRADATION: Accepting essay with {fact_check_result['supported_percentage']*100:.1f}% verified claims (below threshold, time budget exceeded)")
+                quality_warnings.append(f"Fact-check: {fact_check_result['supported_percentage']*100:.1f}% verified claims below threshold {MIN_SUPPORTED_CLAIMS_PCT*100:.0f}% (time limit reached)")
 
-            # NEW: Regeneration exhaustion fallback - accept with warning instead of failing
+            # Regeneration exhaustion fallback - accept with warning instead of failing
             elif self.regeneration_attempts >= MAX_ESSAY_REGENERATION_ATTEMPTS:
                 self._safe_print(f"[Summarizer] ⚠️  REGENERATION EXHAUSTED: Accepting essay with {fact_check_result['supported_percentage']*100:.1f}% verified claims (exceeded max attempts)")
-
-            # Only fail if we somehow don't match above conditions (should not happen)
-            else:
-                error_msg = get_fact_check_failed_error(
-                    fact_check_result["supported_percentage"],
-                    MIN_SUPPORTED_CLAIMS_PCT
-                )
-                self._safe_print(f"[Summarizer] ❌ Essay rejected: {error_msg}")
-                raise ValueError(error_msg)
+                quality_warnings.append(f"Fact-check: {fact_check_result['supported_percentage']*100:.1f}% verified claims below threshold {MIN_SUPPORTED_CLAIMS_PCT*100:.0f}% (regeneration limit reached)")
 
         self._safe_print(f"[Summarizer] ✓ Fact-checking passed ({fact_check_result['supported_percentage']*100:.1f}% of claims verified)")
 
@@ -254,13 +238,13 @@ class SummarizerAgent(BaseAgent):
         # Notify that RAG can be initialized
         self._notify_rag_ready(file_path, analyses)
 
-        # Phase 3: Quality warning flags for transparent reporting
-        quality_warnings = []
-        if quality_score < MIN_QUALITY_SCORE:
+        # Phase 3: Append additional quality warning flags if scores are just below threshold
+        # (graceful degradation warnings were already added during validation layers)
+        if quality_score < MIN_QUALITY_SCORE and f"Quality score {quality_score:.1f}" not in str(quality_warnings):
             quality_warnings.append(f"Quality score {quality_score:.1f} below threshold ({MIN_QUALITY_SCORE})")
-        if citation_result.success_rate < MIN_CITATION_ACCURACY:
+        if citation_result.success_rate < MIN_CITATION_ACCURACY and f"Citation accuracy" not in str(quality_warnings):
             quality_warnings.append(f"Citation accuracy {citation_result.success_rate*100:.1f}% below threshold ({MIN_CITATION_ACCURACY*100:.0f}%)")
-        if fact_check_result["supported_percentage"] < MIN_SUPPORTED_CLAIMS_PCT:
+        if fact_check_result["supported_percentage"] < MIN_SUPPORTED_CLAIMS_PCT and f"Fact-check" not in str(quality_warnings):
             quality_warnings.append(f"Fact-check score {fact_check_result['supported_percentage']*100:.1f}% below threshold ({MIN_SUPPORTED_CLAIMS_PCT*100:.0f}%)")
 
         return {
