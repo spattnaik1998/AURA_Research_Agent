@@ -2,11 +2,20 @@
 LangGraph-based workflow for AURA multi-agent system
 """
 
-from typing import TypedDict, Annotated, List, Dict, Any
+from typing import TypedDict, Annotated, List, Dict, Any, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 import asyncio
 from datetime import datetime
+from ..utils.config import (
+    NODE_TIMEOUT_FETCH_PAPERS,
+    NODE_TIMEOUT_EXECUTE_AGENTS,
+    NODE_TIMEOUT_SYNTHESIZE_ESSAY,
+    MAIN_WORKFLOW_TIMEOUT
+)
+import logging
+
+logger = logging.getLogger('aura.workflow')
 
 
 class ResearchState(TypedDict, total=False):
@@ -31,6 +40,7 @@ class ResearchState(TypedDict, total=False):
     # Results
     all_analyses: List[Dict[str, Any]]
     essay: str
+    audio_essay: str
     essay_file_path: str
     essay_metadata: Dict[str, Any]
     workflow_status: str
@@ -39,6 +49,7 @@ class ResearchState(TypedDict, total=False):
     start_time: str
     end_time: str
     errors: List[str]
+    workflow_start_timestamp: float  # For timeout calculations (internal)
 
 
 class ResearchWorkflow:
@@ -87,7 +98,7 @@ class ResearchWorkflow:
         workflow.add_edge("synthesize_essay", "finalize")
         workflow.add_edge("finalize", END)
 
-        # Compile graph
+        # Compile graph (no checkpoint saver - state is ephemeral)
         return workflow.compile()
 
     async def _initialize_node(self, state: ResearchState) -> ResearchState:
@@ -95,6 +106,7 @@ class ResearchWorkflow:
         print("\n[Workflow] Initializing research workflow...")
 
         state["start_time"] = datetime.now().isoformat()
+        state["workflow_start_timestamp"] = datetime.now().timestamp()  # For timeout calculations
         state["workflow_status"] = "initialized"
         state["papers"] = []
         state["subordinate_results"] = []
@@ -111,11 +123,20 @@ class ResearchWorkflow:
         print(f"[Workflow] Fetching papers for query: {state['query']}")
 
         try:
-            papers = await self.supervisor._fetch_papers(state["query"])
+            papers = await asyncio.wait_for(
+                self.supervisor._fetch_papers(state["query"]),
+                timeout=NODE_TIMEOUT_FETCH_PAPERS
+            )
             state["papers"] = papers
             state["total_papers"] = len(papers)
             state["workflow_status"] = "papers_fetched"
             print(f"[Workflow] Fetched {len(papers)} papers")
+        except asyncio.TimeoutError:
+            error_msg = f"Paper fetching timed out after {NODE_TIMEOUT_FETCH_PAPERS}s"
+            logger.error(error_msg)
+            state["errors"].append(error_msg)
+            state["workflow_status"] = "fetch_timeout"
+            raise ValueError(error_msg)
         except Exception as e:
             state["errors"].append(f"Paper fetch error: {str(e)}")
             state["workflow_status"] = "fetch_failed"
@@ -153,8 +174,9 @@ class ResearchWorkflow:
         print("[Workflow] Executing subordinate agents in parallel...")
 
         try:
-            results = await self.supervisor._execute_subordinates(
-                state["paper_batches"]
+            results = await asyncio.wait_for(
+                self.supervisor._execute_subordinates(state["paper_batches"]),
+                timeout=NODE_TIMEOUT_EXECUTE_AGENTS
             )
             state["subordinate_results"] = results
             state["workflow_status"] = "agents_executed"
@@ -168,6 +190,15 @@ class ResearchWorkflow:
             )
 
             print(f"[Workflow] Agents completed: {state['completed_agents']}/{state['active_agents']}")
+        except asyncio.TimeoutError:
+            error_msg = f"Agent execution timed out after {NODE_TIMEOUT_EXECUTE_AGENTS}s"
+            logger.warning(error_msg)
+            state["errors"].append(error_msg)
+            state["workflow_status"] = "agents_timeout"
+
+            # Collect partial results
+            results = self.supervisor.subordinate_results
+            print(f"[Workflow] ⚠️  Timeout: Collected {len(results)} partial results")
         except Exception as e:
             state["errors"].append(f"Execution error: {str(e)}")
             state["workflow_status"] = "execution_failed"
@@ -200,19 +231,36 @@ class ResearchWorkflow:
         print("[Workflow] Synthesizing essay from analyses...")
 
         try:
+            # Check remaining time and adjust synthesis timeout
+            elapsed_time = datetime.now().timestamp() - state.get("workflow_start_timestamp", 0)
+            remaining_time = MAIN_WORKFLOW_TIMEOUT - elapsed_time
+            synthesis_timeout = min(NODE_TIMEOUT_SYNTHESIZE_ESSAY, max(30, remaining_time - 10))
+
+            if remaining_time < 30:
+                logger.warning(f"⚠️  Only {remaining_time:.0f}s remaining. Skipping essay synthesis.")
+                state["errors"].append("Insufficient time for essay synthesis")
+                state["workflow_status"] = "synthesis_skipped"
+                state["essay"] = "Essay synthesis skipped due to timeout constraints."
+                return state
+
             # Prepare data for summarizer
             summarizer_task = {
                 "query": state["query"],
                 "analyses": state["all_analyses"],
-                "subordinate_results": state["subordinate_results"]
+                "subordinate_results": state["subordinate_results"],
+                "_timeout_remaining": remaining_time
             }
 
-            # Execute summarizer agent
-            result = await self.summarizer.execute(summarizer_task)
+            # Execute summarizer agent with dynamic timeout
+            result = await asyncio.wait_for(
+                self.summarizer.execute(summarizer_task),
+                timeout=synthesis_timeout
+            )
 
             if result.get("status") == "completed":
                 essay_data = result.get("result", {})
                 state["essay"] = essay_data.get("essay", "")
+                state["audio_essay"] = essay_data.get("audio_essay", "")
                 state["essay_file_path"] = essay_data.get("file_path", "")
                 state["essay_metadata"] = {
                     "word_count": essay_data.get("word_count", 0),
@@ -229,6 +277,14 @@ class ResearchWorkflow:
                 state["essay_file_path"] = ""
                 state["essay_metadata"] = {}
 
+        except asyncio.TimeoutError:
+            error_msg = f"Essay synthesis timed out after {synthesis_timeout:.0f}s"
+            logger.warning(error_msg)
+            state["errors"].append(error_msg)
+            state["workflow_status"] = "synthesis_timeout"
+            state["essay"] = "Essay synthesis incomplete due to timeout."
+            state["essay_file_path"] = ""
+            state["essay_metadata"] = {}
         except Exception as e:
             state["errors"].append(f"Synthesis error: {str(e)}")
             state["workflow_status"] = "synthesis_failed"
@@ -263,7 +319,7 @@ class ResearchWorkflow:
             Final state with all results
         """
         # Initialize state
-        initial_state: ResearchState = {
+        initial_state = {
             "query": query,
             "papers": [],
             "total_papers": 0,
@@ -275,7 +331,14 @@ class ResearchWorkflow:
             "workflow_status": "pending",
             "start_time": "",
             "end_time": "",
-            "errors": []
+            "errors": [],
+            "workflow_start_timestamp": 0.0,  # Will be set in initialize node
+            # Add optional fields to avoid LangGraph checkpoint issues
+            "paper_batches": [],
+            "essay": "",
+            "audio_essay": "",
+            "essay_file_path": "",
+            "essay_metadata": {}
         }
 
         # Execute workflow
@@ -294,6 +357,7 @@ class ResearchWorkflow:
             "analyses": final_state["all_analyses"],
             "subordinate_results": final_state["subordinate_results"],
             "essay": final_state.get("essay", ""),
+            "audio_essay": final_state.get("audio_essay", ""),
             "essay_file_path": final_state.get("essay_file_path", ""),
             "essay_metadata": final_state.get("essay_metadata", {}),
             "execution_time": final_state["end_time"],

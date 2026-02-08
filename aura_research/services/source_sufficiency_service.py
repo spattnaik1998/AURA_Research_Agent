@@ -134,7 +134,10 @@ class SourceSufficiencyService:
         """
         venues = set()
 
-        for paper in valid_papers:
+        for result in valid_papers:
+            # Extract the original paper from validation result
+            paper = result.get("paper", result)  # Fall back to result if no "paper" key
+
             # Special handling for Tavily sources
             if paper.get("_source") == "tavily":
                 # Use the link domain as venue for web sources
@@ -153,15 +156,21 @@ class SourceSufficiencyService:
 
             # Try publication info from Serper API
             pub_info = paper.get("publication_info", {})
-            publication_name = pub_info.get("publication", "")
+
+            # Try different field names: "publication", "journal", or "publisher"
+            publication_name = pub_info.get("publication", "") or pub_info.get("journal", "") or pub_info.get("publisher", "")
 
             if publication_name and publication_name.strip():
                 # Normalize venue name (handle arXiv separately)
                 venue = publication_name.strip()
                 if venue.lower().startswith("arxiv"):
                     venue = "arXiv"
-                venues.add(venue)
-                continue
+                elif venue.lower() == "web source (tavily)":
+                    # Skip generic web source marker, use link domain instead
+                    pass
+                else:
+                    venues.add(venue)
+                    continue
 
             # Try enriched metadata from validation
             enriched = paper.get("_enriched_metadata", {})
@@ -202,7 +211,10 @@ class SourceSufficiencyService:
         min_year = current_year - 5
         recent_count = 0
 
-        for paper in valid_papers:
+        for result in valid_papers:
+            # Extract the original paper from validation result
+            paper = result.get("paper", result)  # Fall back to result if no "paper" key
+
             year = self._extract_year(paper)
             if year and year >= min_year:
                 recent_count += 1
@@ -220,15 +232,24 @@ class SourceSufficiencyService:
         Returns:
             Year as integer, or None if not found
         """
-        # Try publication info first
-        pub_info = paper.get("publication_info", {})
-        year_str = pub_info.get("publicationDate", "")
-
-        if year_str:
+        # Try direct year field first (from Serper API)
+        year = paper.get("year")
+        if year:
             try:
-                return int(year_str.split("-")[0])
-            except (ValueError, IndexError):
+                return int(year)
+            except (ValueError, TypeError):
                 pass
+
+        # Try publication info
+        pub_info = paper.get("publication_info", {})
+        if isinstance(pub_info, dict):
+            # Try year field in publication_info
+            year_str = pub_info.get("year", "") or pub_info.get("publicationDate", "")
+            if year_str:
+                try:
+                    return int(str(year_str).split("-")[0])
+                except (ValueError, IndexError, TypeError):
+                    pass
 
         # Try enriched metadata
         enriched = paper.get("_enriched_metadata", {})
@@ -264,20 +285,14 @@ class SourceSufficiencyService:
         """
         effective_count = 0.0
 
-        for paper in valid_papers:
-            # Find corresponding validation result
-            validation = None
-            for result in validation_results:
-                if result.get("paper") == paper:
-                    validation = result
-                    break
+        for result in valid_papers:
+            # result IS the validation result dict (already filtered for is_valid=True)
+            # Extract the original paper from the result
+            paper = result.get("paper", result)
 
-            if not validation:
-                # Use basic weight if no validation found
-                weight = self.VALIDATION_LEVEL_WEIGHTS["basic"]
-            else:
-                level = validation.get("validation_level", "basic")
-                weight = self.VALIDATION_LEVEL_WEIGHTS.get(level, 0.5)
+            # Get validation level from the result
+            level = result.get("validation_level", "basic")
+            weight = self.VALIDATION_LEVEL_WEIGHTS.get(level, 0.5)
 
             # Boost weight for highly cited papers
             citation_count = paper.get("cited_by", {}).get("total", 0)

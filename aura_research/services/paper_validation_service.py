@@ -57,6 +57,16 @@ class PaperValidationService:
 
         logger.info(f"Starting validation of {len(papers)} papers")
 
+        # DEBUG: Check paper types
+        if papers:
+            first_paper = papers[0]
+            logger.debug(f"First paper type: {type(first_paper)}")
+            logger.debug(f"First paper is dict: {isinstance(first_paper, dict)}")
+            if isinstance(first_paper, dict):
+                logger.debug(f"First paper keys: {list(first_paper.keys())[:5]}")
+            else:
+                logger.debug(f"First paper value: {str(first_paper)[:100]}")
+
         # Run validations in parallel with semaphore to respect API limits
         semaphore = asyncio.Semaphore(5)
         tasks = [
@@ -99,8 +109,19 @@ class PaperValidationService:
             Validation result with level and metadata
         """
         async with semaphore:
+            # DEBUG: Log paper type at start of validation
+            logger.debug(f"_validate_paper called with type: {type(paper)}, is_dict: {isinstance(paper, dict)}")
+            if not isinstance(paper, dict):
+                logger.error(f"_validate_paper received non-dict: {type(paper).__name__}: {str(paper)[:100]}")
+                raise TypeError(f"Expected dict, got {type(paper).__name__}")
+
             # Level 1: Basic metadata validation
-            basic_valid, basic_reason = self._validate_basic_metadata(paper)
+            try:
+                basic_valid, basic_reason = self._validate_basic_metadata(paper)
+            except Exception as e:
+                logger.error(f"Error in _validate_basic_metadata: {e}", exc_info=True)
+                raise
+
             if not basic_valid:
                 return {
                     "paper": paper,
@@ -111,8 +132,12 @@ class PaperValidationService:
                 }
 
             # Level 2: DOI verification
-            doi = paper.get("link", "").split("/")[-1] if paper.get("link") else None
-            crossref_data = await self._verify_crossref(paper, doi)
+            try:
+                doi = paper.get("link", "").split("/")[-1] if paper.get("link") else None
+                crossref_data = await self._verify_crossref(paper, doi)
+            except Exception as e:
+                logger.error(f"Error in _verify_crossref: {e}", exc_info=True)
+                raise
 
             if crossref_data:
                 return {
@@ -186,14 +211,20 @@ class PaperValidationService:
 
         # Check year
         pub_info = paper.get("publication_info", {})
-        year_str = pub_info.get("publicationDate", "") or ""
-        if year_str:
-            try:
-                year = int(year_str.split("-")[0])
-                if year < self.MIN_YEAR or year > self.MAX_YEAR:
-                    return False, f"Invalid publication year: {year}"
-            except (ValueError, IndexError):
-                pass  # Year format not parseable, but don't fail
+        if isinstance(pub_info, dict):
+            # Try publicationDate first, then year field
+            year_str = pub_info.get("publicationDate", "") or pub_info.get("year", "")
+            if year_str:
+                try:
+                    # Handle both "2020-01-01" and "2020" formats
+                    year_int = int(str(year_str).split("-")[0])
+                    if year_int < self.MIN_YEAR or year_int > self.MAX_YEAR:
+                        return False, f"Invalid publication year: {year_int}"
+                except (ValueError, IndexError, TypeError):
+                    pass  # Year format not parseable, but don't fail
+        else:
+            # publication_info is a string (shouldn't happen with new code, but be defensive)
+            logger.warning(f"publication_info is a string: {type(pub_info)}, expected dict")
 
         return True, "Basic metadata valid"
 

@@ -181,12 +181,34 @@ class SupervisorAgent(BaseAgent):
 
         # Extract organic results
         for result in results.get("organic", []):
+            # Parse publication info (comes as string from Serper: "Authors - Journal, Year - Publisher")
+            pub_info_str = result.get("publicationInfo", "")
+            publication_info = {
+                "raw": pub_info_str,
+                "authors": "",
+                "journal": "",
+                "year": result.get("year", ""),  # Use year field directly
+                "publisher": ""
+            }
+
+            # Try to parse the publication info string
+            if pub_info_str and " - " in pub_info_str:
+                parts = pub_info_str.split(" - ")
+                if len(parts) >= 2:
+                    publication_info["authors"] = parts[0].strip()
+                    if len(parts) >= 3:
+                        publication_info["journal"] = parts[1].strip()
+                        publication_info["publisher"] = parts[2].strip()
+                    elif len(parts) == 2:
+                        publication_info["journal"] = parts[1].strip()
+
             papers.append({
                 "title": result.get("title", ""),
                 "snippet": result.get("snippet", ""),
                 "link": result.get("link", ""),
-                "publication_info": result.get("publicationInfo", {}),
-                "cited_by": {"total": result.get("citedBy", 0)}
+                "publication_info": publication_info,
+                "cited_by": {"total": result.get("citedBy", 0)},
+                "year": result.get("year", "")
             })
 
         logger.info(f"Successfully fetched {len(papers)} papers from Serper API")

@@ -64,7 +64,7 @@ VALIDATION_CACHE_HOURS = 24
 
 # Source Sufficiency
 MIN_UNIQUE_VENUES = 2
-MIN_RECENT_PAPERS = 1
+MIN_RECENT_PAPERS = 0  # Allow papers of any age (foundational topics may not have recent papers)
 MIN_EFFECTIVE_COUNT = 3.0
 
 # Quality Scoring
@@ -84,6 +84,14 @@ MIN_SUPPORTED_CLAIMS_PCT = 0.85
 # Academic Rigor Settings
 STRICT_MODE = True
 ALLOW_MOCK_DATA = False  # CRITICAL: Must remain False
+
+# Timeout Configuration (seconds)
+MAIN_WORKFLOW_TIMEOUT = 300  # 5 minutes total
+NODE_TIMEOUT_FETCH_PAPERS = 60  # 1 minute for paper fetching
+NODE_TIMEOUT_EXECUTE_AGENTS = 180  # 3 minutes for agent execution
+NODE_TIMEOUT_SYNTHESIZE_ESSAY = 120  # 2 minutes for essay synthesis
+LLM_CALL_TIMEOUT = 60  # 1 minute per individual LLM call
+GRACEFUL_DEGRADATION_THRESHOLD = 240  # 4 minutes (start wrapping up)
 
 def get_storage_paths():
     """Return all storage paths as a dictionary"""
