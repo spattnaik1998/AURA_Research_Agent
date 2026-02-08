@@ -7,6 +7,8 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 import asyncio
 from datetime import datetime
+import sys
+import io
 from ..utils.config import (
     NODE_TIMEOUT_FETCH_PAPERS,
     NODE_TIMEOUT_EXECUTE_AGENTS,
@@ -69,6 +71,24 @@ class ResearchWorkflow:
         self.summarizer = summarizer_agent
         self.graph = self._build_graph()
 
+        # Configure stdout for UTF-8 encoding on Windows
+        if sys.stdout.encoding != 'utf-8':
+            try:
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+            except Exception as e:
+                pass  # Fallback to default encoding if reconfiguration fails
+
+    def _safe_print(self, message: str):
+        """Safely print message with Unicode encoding error handling"""
+        try:
+            print(message)
+        except UnicodeEncodeError:
+            # If Unicode encoding fails, encode with replacement characters
+            print(message.encode('utf-8', errors='replace').decode('utf-8', errors='replace'))
+        except Exception as e:
+            # Final fallback - remove any problematic characters
+            print(message.encode('ascii', errors='replace').decode('ascii'))
+
     def _build_graph(self) -> StateGraph:
         """
         Build the LangGraph workflow
@@ -103,7 +123,7 @@ class ResearchWorkflow:
 
     async def _initialize_node(self, state: ResearchState) -> ResearchState:
         """Initialize the workflow"""
-        print("\n[Workflow] Initializing research workflow...")
+        self._safe_print("\n[Workflow] Initializing research workflow...")
 
         state["start_time"] = datetime.now().isoformat()
         state["workflow_start_timestamp"] = datetime.now().timestamp()  # For timeout calculations
@@ -120,7 +140,7 @@ class ResearchWorkflow:
 
     async def _fetch_papers_node(self, state: ResearchState) -> ResearchState:
         """Fetch research papers"""
-        print(f"[Workflow] Fetching papers for query: {state['query']}")
+        self._safe_print(f"[Workflow] Fetching papers for query: {state['query']}")
 
         try:
             papers = await asyncio.wait_for(
@@ -130,7 +150,7 @@ class ResearchWorkflow:
             state["papers"] = papers
             state["total_papers"] = len(papers)
             state["workflow_status"] = "papers_fetched"
-            print(f"[Workflow] Fetched {len(papers)} papers")
+            self._safe_print(f"[Workflow] Fetched {len(papers)} papers")
         except asyncio.TimeoutError:
             error_msg = f"Paper fetching timed out after {NODE_TIMEOUT_FETCH_PAPERS}s"
             logger.error(error_msg)
@@ -145,7 +165,7 @@ class ResearchWorkflow:
 
     async def _distribute_work_node(self, state: ResearchState) -> ResearchState:
         """Distribute papers to subordinate agents"""
-        print("[Workflow] Categorizing and distributing papers...")
+        self._safe_print("[Workflow] Categorizing and distributing papers...")
 
         try:
             # Categorize papers
@@ -171,7 +191,7 @@ class ResearchWorkflow:
 
     async def _execute_agents_node(self, state: ResearchState) -> ResearchState:
         """Execute subordinate agents in parallel"""
-        print("[Workflow] Executing subordinate agents in parallel...")
+        self._safe_print("[Workflow] Executing subordinate agents in parallel...")
 
         try:
             results = await asyncio.wait_for(
@@ -198,7 +218,7 @@ class ResearchWorkflow:
 
             # Collect partial results
             results = self.supervisor.subordinate_results
-            print(f"[Workflow] ⚠️  Timeout: Collected {len(results)} partial results")
+            self._safe_print(f"[Workflow] ⚠️  Timeout: Collected {len(results)} partial results")
         except Exception as e:
             state["errors"].append(f"Execution error: {str(e)}")
             state["workflow_status"] = "execution_failed"
@@ -207,7 +227,7 @@ class ResearchWorkflow:
 
     async def _collect_results_node(self, state: ResearchState) -> ResearchState:
         """Collect and aggregate results from all agents"""
-        print("[Workflow] Collecting results from all agents...")
+        self._safe_print("[Workflow] Collecting results from all agents...")
 
         try:
             all_analyses = []
@@ -228,7 +248,7 @@ class ResearchWorkflow:
 
     async def _synthesize_essay_node(self, state: ResearchState) -> ResearchState:
         """Synthesize essay from all analyses"""
-        print("[Workflow] Synthesizing essay from analyses...")
+        self._safe_print("[Workflow] Synthesizing essay from analyses...")
 
         try:
             # Check remaining time and adjust synthesis timeout
@@ -252,27 +272,51 @@ class ResearchWorkflow:
             }
 
             # Execute summarizer agent with dynamic timeout
-            result = await asyncio.wait_for(
-                self.summarizer.execute(summarizer_task),
-                timeout=synthesis_timeout
-            )
+            try:
+                logger.info(f"Executing summarizer with timeout: {synthesis_timeout}s")
+                result = await asyncio.wait_for(
+                    self.summarizer.execute(summarizer_task),
+                    timeout=synthesis_timeout
+                )
+                logger.info(f"Summarizer returned status: {result.get('status')}")
+                if result.get('status') != 'completed':
+                    logger.error(f"Summarizer failed! Result: {result}")
+                    self._safe_print(f"[ERROR] Summarizer failed: {result.get('error', 'Unknown error')}")
 
-            if result.get("status") == "completed":
-                essay_data = result.get("result", {})
-                state["essay"] = essay_data.get("essay", "")
-                state["audio_essay"] = essay_data.get("audio_essay", "")
-                state["essay_file_path"] = essay_data.get("file_path", "")
-                state["essay_metadata"] = {
-                    "word_count": essay_data.get("word_count", 0),
-                    "citations": essay_data.get("citations", 0),
-                    "papers_synthesized": essay_data.get("papers_synthesized", 0)
-                }
-                state["workflow_status"] = "essay_synthesized"
+                if result.get("status") == "completed":
+                    essay_data = result.get("result", {})
+                    logger.info(f"Essay data keys: {list(essay_data.keys())}")
+                    logger.info(f"Essay length: {len(essay_data.get('essay', ''))}")
 
-                print(f"[Workflow] Essay synthesized: {essay_data.get('word_count', 0)} words")
-            else:
-                state["errors"].append(f"Summarizer failed: {result.get('error', 'Unknown error')}")
-                state["workflow_status"] = "synthesis_failed"
+                    state["essay"] = essay_data.get("essay", "")
+                    state["audio_essay"] = essay_data.get("audio_essay", "")
+                    state["essay_file_path"] = essay_data.get("file_path", "")
+                    state["essay_metadata"] = {
+                        "word_count": essay_data.get("word_count", 0),
+                        "citations": essay_data.get("citations", 0),
+                        "papers_synthesized": essay_data.get("papers_synthesized", 0)
+                    }
+                    state["workflow_status"] = "essay_synthesized"
+
+                    self._safe_print(f"[Workflow] Essay synthesized: {essay_data.get('word_count', 0)} words")
+                else:
+                    state["errors"].append(f"Summarizer failed: {result.get('error', 'Unknown error')}")
+                    state["workflow_status"] = "synthesis_failed"
+                    state["essay"] = ""
+                    state["essay_file_path"] = ""
+                    state["essay_metadata"] = {}
+            except UnicodeEncodeError as e:
+                logger.error(f"Unicode encoding error during summarizer execution: {e}", exc_info=True)
+                state["errors"].append(f"Unicode encoding error: {str(e)}")
+                state["workflow_status"] = "synthesis_error"
+                # Return empty essay but mark as error rather than crash
+                state["essay"] = ""
+                state["essay_file_path"] = ""
+                state["essay_metadata"] = {}
+            except Exception as e:
+                logger.error(f"Error in summarizer execution: {e}", exc_info=True)
+                state["errors"].append(f"Summarizer error: {str(e)}")
+                state["workflow_status"] = "synthesis_error"
                 state["essay"] = ""
                 state["essay_file_path"] = ""
                 state["essay_metadata"] = {}
@@ -296,15 +340,15 @@ class ResearchWorkflow:
 
     async def _finalize_node(self, state: ResearchState) -> ResearchState:
         """Finalize the workflow"""
-        print("[Workflow] Finalizing workflow...")
+        self._safe_print("[Workflow] Finalizing workflow...")
 
         state["end_time"] = datetime.now().isoformat()
         state["workflow_status"] = "completed"
 
-        print(f"[Workflow] Workflow completed successfully")
-        print(f"[Workflow] Total papers: {state['total_papers']}")
-        print(f"[Workflow] Analyses generated: {len(state['all_analyses'])}")
-        print(f"[Workflow] Success rate: {state['completed_agents']}/{state['active_agents']}")
+        self._safe_print(f"[Workflow] Workflow completed successfully")
+        self._safe_print(f"[Workflow] Total papers: {state['total_papers']}")
+        self._safe_print(f"[Workflow] Analyses generated: {len(state['all_analyses'])}")
+        self._safe_print(f"[Workflow] Success rate: {state['completed_agents']}/{state['active_agents']}")
 
         return state
 

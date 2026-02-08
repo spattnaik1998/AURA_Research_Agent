@@ -9,7 +9,11 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from ..utils.config import OPENAI_API_KEY, GPT_MODEL
+from ..utils.config import (
+    OPENAI_API_KEY, GPT_MODEL,
+    FACT_CHECK_TOP_N_CLAIMS,
+    MIN_SUPPORTED_CLAIMS_PCT
+)
 import asyncio
 
 logger = logging.getLogger('aura.services')
@@ -29,17 +33,16 @@ class ClaimVerificationResult:
 class FactCheckingService:
     """LLM-based fact-checking against source papers"""
 
-    # Configuration
-    TOP_N_CLAIMS = 10
-    MIN_SUPPORTED_CLAIMS_PCT = 0.85
-
     def __init__(self):
-        """Initialize fact-checking service with LLM"""
+        """Initialize fact-checking service with LLM and config thresholds"""
+        self.TOP_N_CLAIMS = FACT_CHECK_TOP_N_CLAIMS
+        self.MIN_SUPPORTED_CLAIMS_PCT = MIN_SUPPORTED_CLAIMS_PCT
         self.llm = ChatOpenAI(
             model=GPT_MODEL,
             api_key=OPENAI_API_KEY,
             temperature=0.1  # Very precise
         )
+        logger.debug(f"Loaded fact-checking config: top_n={self.TOP_N_CLAIMS}, min_pct={self.MIN_SUPPORTED_CLAIMS_PCT*100:.1f}%")
 
     async def verify_essay_claims(
         self,

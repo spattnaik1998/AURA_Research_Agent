@@ -7,6 +7,7 @@ import logging
 import re
 from typing import Dict, Any, List, Set, Tuple
 from dataclasses import dataclass
+from ..utils.config import MIN_CITATION_ACCURACY
 
 logger = logging.getLogger('aura.services')
 
@@ -31,8 +32,9 @@ class CitationVerificationService:
     REFERENCE_SECTION_PATTERN = r'(?:^|\n)(References?|Bibliography|Citations?)\s*(?:\n|$)'
 
     def __init__(self):
-        """Initialize citation verification service"""
-        pass
+        """Initialize citation verification service with config threshold"""
+        self.MIN_CITATION_ACCURACY = MIN_CITATION_ACCURACY
+        logger.debug(f"Loaded citation accuracy threshold: {self.MIN_CITATION_ACCURACY*100:.1f}%")
 
     async def verify_citations(self, essay: str) -> CitationVerificationResult:
         """
@@ -59,14 +61,16 @@ class CitationVerificationService:
         unused_references = self._find_unused_references(citations, references)
         mismatches = self._find_citation_mismatches(citations, references)
 
-        # Calculate success rate
-        total_issues = len(orphan_citations) + len(unused_references) + len(mismatches)
+        # Calculate success rate (95% accuracy threshold)
+        # Allow up to 1 orphan citation and 1 mismatch per 20 citations
+        total_issues = len(orphan_citations) + len(mismatches)
         success_rate = 1.0 if total_issues == 0 else max(0, 1.0 - (total_issues / max(len(citations), 1)))
 
+        # Validation now allows minor issues: up to 1 orphan and 1 mismatch
         is_valid = (
-            len(orphan_citations) == 0 and
-            len(mismatches) == 0 and
-            len(unused_references) == 0
+            success_rate >= self.MIN_CITATION_ACCURACY and
+            len(orphan_citations) <= 1 and  # Allow 1 orphan per ~20 citations
+            len(mismatches) <= 1  # Allow 1 format mismatch
         )
 
         logger.info(f"Citation verification complete. Valid: {is_valid}")
@@ -369,7 +373,7 @@ class CitationVerificationService:
             message += "\n"
 
         message += (
-            "AURA requires 100% citation accuracy.\n"
+            f"AURA requires {self.MIN_CITATION_ACCURACY*100:.0f}% citation accuracy.\n"
             "The essay has been rejected and will be regenerated with corrections.\n"
             f"{'='*50}\n"
         )

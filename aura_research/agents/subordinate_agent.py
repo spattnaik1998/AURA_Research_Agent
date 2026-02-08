@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from openai import RateLimitError, APIError
 from .base_agent import BaseAgent, AgentStatus
-from ..utils.config import OPENAI_API_KEY, GPT_MODEL
+from ..utils.config import OPENAI_API_KEY, GPT_MODEL, LLM_CALL_TIMEOUT
 import json
 
 # Setup logger
@@ -211,14 +211,17 @@ CRITICAL REMINDERS:
             try:
                 logger.info(f"Analyzing paper: {paper.get('title', 'Unknown')[:50]}...")
 
-                # Run LLM analysis
+                # Run LLM analysis with timeout
                 chain = prompt | self.llm
-                response = await chain.ainvoke({
-                    "title": paper.get("title", "Unknown"),
-                    "snippet": paper.get("snippet", "No description available"),
-                    "link": paper.get("link", ""),
-                    "pub_info": str(paper.get("publication_info", ""))
-                })
+                response = await asyncio.wait_for(
+                    chain.ainvoke({
+                        "title": paper.get("title", "Unknown"),
+                        "snippet": paper.get("snippet", "No description available"),
+                        "link": paper.get("link", ""),
+                        "pub_info": str(paper.get("publication_info", ""))
+                    }),
+                    timeout=LLM_CALL_TIMEOUT
+                )
 
                 # Parse JSON response
                 content = response.content
@@ -256,6 +259,15 @@ CRITICAL REMINDERS:
 
                 logger.info(f"Successfully analyzed paper: {paper.get('title', 'Unknown')[:50]}")
                 return analysis
+
+            except asyncio.TimeoutError as e:
+                last_error = e
+                logger.error(f"LLM call timed out after {LLM_CALL_TIMEOUT}s for paper: {paper.get('title', 'Unknown')[:50]}")
+                if attempt < MAX_RETRIES - 1:
+                    logger.info(f"Retrying timed-out analysis...")
+                    await asyncio.sleep(2)
+                else:
+                    break
 
             except RateLimitError as e:
                 last_error = e
@@ -356,12 +368,23 @@ Use precise language and specific examples from the analyses.""")
         for attempt in range(MAX_RETRIES):
             try:
                 chain = summary_prompt | self.llm
-                response = await chain.ainvoke({
-                    "analyses": json.dumps(analyses, indent=2)
-                })
+                response = await asyncio.wait_for(
+                    chain.ainvoke({
+                        "analyses": json.dumps(analyses, indent=2)
+                    }),
+                    timeout=LLM_CALL_TIMEOUT
+                )
 
                 logger.info(f"Successfully created summary for {len(analyses)} analyses")
                 return response.content.strip()
+
+            except asyncio.TimeoutError as e:
+                logger.error(f"Summary LLM call timed out after {LLM_CALL_TIMEOUT}s")
+                if attempt < MAX_RETRIES - 1:
+                    logger.info(f"Retrying summary generation...")
+                    await asyncio.sleep(2)
+                else:
+                    break
 
             except RateLimitError as e:
                 wait_time = BASE_WAIT_TIME * (attempt + 1)

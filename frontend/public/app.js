@@ -915,6 +915,16 @@ function handleResearchComplete(status) {
     // Show download section
     document.getElementById('download-section').classList.remove('hidden');
 
+    // Show essay reader panel and reset loaded state
+    const essayPanel = document.getElementById('essay-reader-panel');
+    if (essayPanel) {
+        essayPanel.classList.remove('hidden');
+    }
+    const essayContent = document.getElementById('essay-content');
+    if (essayContent) {
+        delete essayContent.dataset.loaded;
+    }
+
     // Initialize audio UI
     initializeAudioUI();
 
@@ -926,14 +936,8 @@ function handleResearchComplete(status) {
     // Show success notification
     showNotification('Research completed successfully!', 'success');
 
-    // Automatically switch to RAG Chatbot tab after 2 seconds
-    setTimeout(() => {
-        switchTab('chatbot');
-        // Reload sessions to show the new one
-        loadAvailableSessions();
-        // Show notification in chatbot tab
-        showNotification('Research complete! Select the session to ask questions.', 'info');
-    }, 2000);
+    // Load sessions in background for chatbot tab
+    loadAvailableSessions();
 }
 
 /**
@@ -1170,6 +1174,137 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * ============================================
+ * ESSAY READER FUNCTIONS
+ * ============================================
+ */
+
+/**
+ * Toggle essay content panel visibility
+ */
+function toggleEssayPanel() {
+    const wrapper = document.getElementById('essay-content-wrapper');
+    const btn = document.getElementById('essay-toggle-btn');
+
+    if (!wrapper || !btn) return;
+
+    if (wrapper.classList.contains('hidden')) {
+        wrapper.classList.remove('hidden');
+        btn.textContent = 'Hide Essay';
+        // Load content on first open
+        const content = document.getElementById('essay-content');
+        if (content && !content.dataset.loaded) {
+            loadEssayContent();
+        }
+    } else {
+        wrapper.classList.add('hidden');
+        btn.textContent = 'Read Essay';
+    }
+}
+
+/**
+ * Load essay content from the API
+ */
+async function loadEssayContent() {
+    if (!currentSessionId) return;
+
+    const contentDiv = document.getElementById('essay-content');
+    if (!contentDiv) return;
+
+    contentDiv.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Loading essay...</p>';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/research/session/${currentSessionId}/details`, {
+            headers: getAuthHeaders()
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch essay details');
+        }
+
+        const data = await response.json();
+
+        // API returns essay as an object with full_content / full_content_markdown
+        const essayObj = data.essay;
+        const essayText = essayObj?.full_content_markdown || essayObj?.full_content || '';
+
+        if (!essayText) {
+            contentDiv.innerHTML = '<p style="color: var(--text-muted); text-align: center;">No essay content available.</p>';
+            return;
+        }
+
+        // Render the essay with markdown formatting
+        contentDiv.innerHTML = formatEssayMarkdown(essayText);
+        contentDiv.dataset.loaded = 'true';
+
+        // Update word count and citation count
+        const wordCount = essayText.split(/\s+/).filter(w => w.length > 0).length;
+        const citationMatches = essayText.match(/\([^)]*et al\.,?\s*\d{4}\)/g);
+        const citationCount = citationMatches ? citationMatches.length : 0;
+
+        const wordCountEl = document.getElementById('essay-word-count');
+        const citationCountEl = document.getElementById('essay-citation-count');
+
+        if (wordCountEl) wordCountEl.textContent = `${wordCount} words`;
+        if (citationCountEl) citationCountEl.textContent = `${citationCount} citation${citationCount !== 1 ? 's' : ''}`;
+
+    } catch (error) {
+        console.error('Error loading essay:', error);
+        contentDiv.innerHTML = '<p style="color: var(--error); text-align: center;">Failed to load essay content.</p>';
+    }
+}
+
+/**
+ * Format essay markdown to HTML for display
+ */
+function formatEssayMarkdown(text) {
+    let html = escapeHtml(text);
+
+    // Headers: # ## ###
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+    // Horizontal rules
+    html = html.replace(/^---+$/gm, '<hr>');
+
+    // Bold **text**
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic *text*
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // Numbered lists
+    html = html.replace(/^(\d+)\.\s+(.+)$/gm, '<li>$2</li>');
+
+    // Bullet lists
+    html = html.replace(/^[•\-]\s+(.+)$/gm, '<li>$1</li>');
+
+    // Wrap consecutive <li> in <ul> or <ol>
+    html = html.replace(/(<li>.*?<\/li>\n?)+/g, function(match) {
+        return '<ul>' + match + '</ul>';
+    });
+
+    // URL links [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    // Paragraphs: split by double newlines
+    const blocks = html.split(/\n\n+/);
+    html = blocks.map(block => {
+        block = block.trim();
+        if (!block) return '';
+        // Don't wrap if already an HTML element
+        if (block.startsWith('<h') || block.startsWith('<hr') || block.startsWith('<ul') || block.startsWith('<ol')) {
+            return block;
+        }
+        // Replace single newlines within a block with <br>
+        return '<p>' + block.replace(/\n/g, '<br>') + '</p>';
+    }).join('\n');
+
+    return html;
 }
 
 /**

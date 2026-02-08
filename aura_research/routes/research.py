@@ -17,6 +17,7 @@ from ..utils.image_analyzer import get_image_analyzer
 from ..services.db_service import get_db_service
 from ..services.auth_service import get_auth_service
 from ..services.audio_service import get_audio_service
+from ..utils.config import MAIN_WORKFLOW_TIMEOUT
 
 security = HTTPBearer(auto_error=False)
 
@@ -182,14 +183,18 @@ async def run_research_workflow(
         db_service.update_session_status(session_id, "analyzing", progress=30)
         logger.info(f"Analyzing papers for session {session_id}")
 
-        # Run research with timeout protection (10 minutes max)
+        # Run research with timeout protection (5 minutes max)
         try:
             result = await asyncio.wait_for(
                 orchestrator.execute_research(query, session_id=session_id),
-                timeout=600.0  # 10 minutes
+                timeout=MAIN_WORKFLOW_TIMEOUT  # 5 minutes
             )
         except asyncio.TimeoutError:
-            raise Exception("Research workflow timed out after 10 minutes. Please try with a more specific query.")
+            logger.warning(f"Research workflow timed out after {MAIN_WORKFLOW_TIMEOUT}s")
+            raise Exception(
+                f"Research workflow timed out after {MAIN_WORKFLOW_TIMEOUT // 60} minutes. "
+                f"Try a more specific query or check session status for partial results."
+            )
 
         # Save papers to database
         papers = orchestrator.supervisor.papers

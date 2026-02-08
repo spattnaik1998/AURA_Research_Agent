@@ -614,6 +614,69 @@
             margin-bottom: 3rem;
         }
 
+        /* Essay content styling */
+        #essay-content h1 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        #essay-content h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.75rem;
+            margin-top: 1.25rem;
+        }
+
+        #essay-content h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        #essay-content p {
+            margin-bottom: 1rem;
+            text-align: justify;
+            color: var(--text-secondary);
+        }
+
+        #essay-content hr {
+            border: none;
+            border-top: 1px solid var(--border-subtle);
+            margin: 1.5rem 0;
+        }
+
+        #essay-content strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        #essay-content em {
+            font-style: italic;
+        }
+
+        #essay-content ol, #essay-content ul {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+            color: var(--text-secondary);
+        }
+
+        #essay-content li {
+            margin-bottom: 0.25rem;
+        }
+
+        #essay-content a {
+            color: var(--accent-primary);
+            text-decoration: underline;
+        }
+
         /* Hide class */
         .hidden { display: none !important; }
 
@@ -909,6 +972,27 @@
                             </div>
                             <h3 class="serif-display text-2xl mb-2" style="color: var(--text-primary);">Research Complete</h3>
                             <p class="mb-6" style="color: var(--text-secondary);">Your essay has been generated successfully</p>
+
+                            <!-- Essay Reading Panel -->
+                            <div id="essay-reader-panel" class="hidden mb-6" style="text-align: left;">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h4 class="serif-display" style="color: var(--text-primary); font-size: 1.125rem;">Research Essay</h4>
+                                    <button onclick="toggleEssayPanel()" id="essay-toggle-btn" class="btn-secondary" style="padding: 0.5rem 1.25rem; font-size: 0.85rem;">
+                                        Read Essay
+                                    </button>
+                                </div>
+                                <div id="essay-content-wrapper" class="hidden">
+                                    <div id="essay-content" class="text-left p-6 rounded-lg overflow-y-auto"
+                                         style="background: var(--bg-deep); border: 1px solid var(--border-subtle);
+                                                max-height: 500px; line-height: 1.8; font-size: 0.95rem;">
+                                        Loading essay content...
+                                    </div>
+                                    <div class="flex justify-between mt-3">
+                                        <span id="essay-word-count" class="text-xs" style="color: var(--text-muted);"></span>
+                                        <span id="essay-citation-count" class="text-xs" style="color: var(--text-muted);"></span>
+                                    </div>
+                                </div>
+                            </div>
 
                             <div id="audio-controls" class="flex flex-col items-center gap-4 mb-6">
                                 <audio id="essay-audio-player" controls class="hidden w-full max-w-md" style="border-radius: 8px;">
