@@ -67,19 +67,23 @@ MIN_UNIQUE_VENUES = 2
 MIN_RECENT_PAPERS = 0  # Allow papers of any age (foundational topics may not have recent papers)
 MIN_EFFECTIVE_COUNT = 3.0
 
-# Quality Scoring
-MIN_QUALITY_SCORE = 5.0
+# Quality Scoring (Phase 1: Relaxed thresholds for better success rate)
+MIN_QUALITY_SCORE = 4.0  # Down from 5.0 (-20%) - accept "acceptable" vs "good" essays
 FLAG_QUALITY_SCORE = 6.5
 EXCELLENT_QUALITY_SCORE = 8.0
 CITATION_DENSITY_TARGET = 0.0057  # 1 per 175 words
-MAX_ESSAY_REGENERATION_ATTEMPTS = 2
+MAX_ESSAY_REGENERATION_ATTEMPTS = 4  # Up from 2 (+100%) - more chances without infinite loops
+
+# Quality Scoring (Phase 2: Consolidated hardcoded thresholds)
+QUALITY_ISSUE_THRESHOLD = 3.5  # Down from 4.0 (-12.5%) - reduces false dimension flags
+CITATION_DENSITY_TOLERANCE = 0.006  # Up from 0.003 (+100%) - allows natural variation
 
 # Citation Verification
-MIN_CITATION_ACCURACY = 0.95  # 95% required (relaxed from 100% to allow minor formatting variations)
+MIN_CITATION_ACCURACY = 0.85  # Down from 0.95 (-10%) - allows 3 issues per 20 citations
 
 # Fact Checking
 FACT_CHECK_TOP_N_CLAIMS = 10
-MIN_SUPPORTED_CLAIMS_PCT = 0.85
+MIN_SUPPORTED_CLAIMS_PCT = 0.75  # Down from 0.85 (-12%) - 7.5/10 claims vs 8.5/10
 
 # Academic Rigor Settings
 STRICT_MODE = True

@@ -7,6 +7,14 @@ import logging
 import re
 from typing import Dict, Any, List
 import spacy
+from ..utils.config import (
+    MIN_QUALITY_SCORE,
+    FLAG_QUALITY_SCORE,
+    EXCELLENT_QUALITY_SCORE,
+    CITATION_DENSITY_TARGET,
+    QUALITY_ISSUE_THRESHOLD,
+    CITATION_DENSITY_TOLERANCE
+)
 
 logger = logging.getLogger('aura.services')
 
@@ -14,14 +22,14 @@ logger = logging.getLogger('aura.services')
 class QualityScoringService:
     """Automated quality assessment for academic essays"""
 
-    # Quality thresholds
-    REJECTION_THRESHOLD = 5.0  # Minimum score for acceptance
-    FLAG_THRESHOLD = 6.5       # Flag for review if between 5.0 and 6.5
-    EXCELLENT_THRESHOLD = 8.0
+    # Quality thresholds (imported from config for centralization)
+    REJECTION_THRESHOLD = MIN_QUALITY_SCORE
+    FLAG_THRESHOLD = FLAG_QUALITY_SCORE
+    EXCELLENT_THRESHOLD = EXCELLENT_QUALITY_SCORE
 
-    # Citation metrics
-    CITATION_DENSITY_TARGET = 0.0057  # 1 citation per ~175 words
-    CITATION_DENSITY_TOLERANCE = 0.003  # ±0.3%
+    # Citation metrics (imported from config for centralization)
+    CITATION_DENSITY_TARGET = CITATION_DENSITY_TARGET
+    CITATION_DENSITY_TOLERANCE = CITATION_DENSITY_TOLERANCE
 
     # Dimension weights
     DIMENSION_WEIGHTS = {
@@ -419,7 +427,7 @@ class QualityScoringService:
             List of identified issues
         """
         issues = []
-        issue_threshold = 4.0  # Below 4/10 is an issue
+        issue_threshold = QUALITY_ISSUE_THRESHOLD  # Imported from config for centralization
 
         dimension_descriptions = {
             "citation_density": "Citation density too low or too high",
