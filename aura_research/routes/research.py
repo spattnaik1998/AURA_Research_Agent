@@ -100,28 +100,43 @@ async def generate_audio_background(
         user_id: User ID for tracking (optional)
     """
     try:
-        import hashlib
         from pathlib import Path
 
         if not audio_content or not audio_content.strip():
             logger.warning(f"No audio content to generate for session {session_id}")
             return
 
-        # Get audio service
+        # Get audio service and database service
         audio_service = get_audio_service()
+        db_service = get_db_service()
 
-        # Generate content hash for caching
-        content_hash = hashlib.md5(audio_content.encode()).hexdigest()[:8]
+        # Get integer session ID from database
+        session_record = db_service.get_session_details(session_id)
+        if not session_record:
+            logger.warning(f"Session not found: {session_id}")
+            return
+
+        session_id_int = session_record.get("session_id")
 
         # Generate audio file
         logger.info(f"Starting background audio generation for session {session_id}...")
-        audio_result = await audio_service.generate_audio(audio_content, session_id, content_hash)
+        audio_result = await audio_service.generate_audio(
+            text=audio_content,
+            session_id=session_id_int,
+            voice_id=None
+        )
         audio_path = audio_result.get("audio_path") if audio_result else None
 
         if audio_path:
             # Save audio metadata to database
-            db_service = get_db_service()
-            db_service.save_audio(session_id, audio_path, user_id)
+            audio_filename = Path(audio_path).name
+            audio_file_size = Path(audio_path).stat().st_size
+            db_service.create_audio_record(
+                session_code=session_id,
+                audio_filename=audio_filename,
+                file_size_bytes=audio_file_size,
+                user_id=user_id
+            )
             logger.info(f"✓ Audio generated successfully for session {session_id}: {audio_path}")
         else:
             logger.warning(f"Audio generation returned no path for session {session_id}")
