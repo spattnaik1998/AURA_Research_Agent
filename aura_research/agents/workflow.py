@@ -47,6 +47,15 @@ class ResearchState(TypedDict, total=False):
     essay_metadata: Dict[str, Any]
     workflow_status: str
 
+    # Quality Metadata (from summarizer)
+    quality_score: Optional[float]
+    citation_accuracy: Optional[float]
+    fact_check_score: Optional[float]
+    quality_warnings: List[str]
+    regeneration_exhausted: bool
+    regeneration_attempts: int
+    reasoning_trace: Dict[str, Any]
+
     # Metadata
     start_time: str
     end_time: str
@@ -296,6 +305,16 @@ class ResearchWorkflow:
                         "citations": essay_data.get("citations", 0),
                         "papers_synthesized": essay_data.get("papers_synthesized", 0)
                     }
+
+                    # Extract quality metadata from summarizer result
+                    state["quality_score"] = essay_data.get("quality_score")
+                    state["citation_accuracy"] = essay_data.get("citation_accuracy")
+                    state["fact_check_score"] = essay_data.get("fact_check_score")
+                    state["quality_warnings"] = essay_data.get("quality_warnings", [])
+                    state["regeneration_exhausted"] = essay_data.get("regeneration_exhausted", False)
+                    state["regeneration_attempts"] = essay_data.get("regeneration_attempts", 0)
+                    state["reasoning_trace"] = essay_data.get("reasoning_trace", {})
+
                     state["workflow_status"] = "essay_synthesized"
 
                     self._safe_print(f"[Workflow] Essay synthesized: {essay_data.get('word_count', 0)} words")
@@ -417,6 +436,14 @@ class ResearchWorkflow:
             "audio_essay": final_state.get("audio_essay", ""),
             "essay_file_path": final_state.get("essay_file_path", ""),
             "essay_metadata": final_state.get("essay_metadata", {}),
+            # Quality metadata from summarizer (Phase 2 of essay robustness)
+            "quality_score": final_state.get("quality_score"),
+            "citation_accuracy": final_state.get("citation_accuracy"),
+            "fact_check_score": final_state.get("fact_check_score"),
+            "quality_warnings": final_state.get("quality_warnings", []),
+            "regeneration_exhausted": final_state.get("regeneration_exhausted", False),
+            "regeneration_attempts": final_state.get("regeneration_attempts", 0),
+            "reasoning_trace": final_state.get("reasoning_trace", {}),
             "execution_time": final_state["end_time"],
             "errors": final_state["errors"]
         }

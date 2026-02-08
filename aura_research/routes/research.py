@@ -115,7 +115,8 @@ async def generate_audio_background(
 
         # Generate audio file
         logger.info(f"Starting background audio generation for session {session_id}...")
-        audio_path = audio_service.generate_audio(audio_content, session_id, content_hash)
+        audio_result = await audio_service.generate_audio(audio_content, session_id, content_hash)
+        audio_path = audio_result.get("audio_path") if audio_result else None
 
         if audio_path:
             # Save audio metadata to database
@@ -306,13 +307,23 @@ async def run_research_workflow(
             "word_count": result.get("essay_metadata", {}).get("word_count", 0)
         })
 
-        # Phase 4: Log success metrics for monitoring
+        # Phase 4: Log success metrics for monitoring (with safe formatting)
         metrics_logger = logging.getLogger("aura.metrics")
+
+        # Extract quality metrics with safe formatting (handles None/missing values)
+        quality_score = result.get('quality_score')
+        citation_accuracy = result.get('citation_accuracy')
+        fact_check_score = result.get('fact_check_score')
+
+        quality_str = f"{quality_score:.2f}" if quality_score is not None else "N/A"
+        citation_str = f"{citation_accuracy:.2f}" if citation_accuracy is not None else "N/A"
+        fact_str = f"{fact_check_score:.2f}" if fact_check_score is not None else "N/A"
+
         metrics_logger.info(
             f"SUCCESS | session={session_id} | query={query} | "
-            f"quality={result.get('quality_score', 'N/A'):.2f} | "
-            f"citations={result.get('citation_accuracy', 'N/A'):.2f} | "
-            f"facts={result.get('fact_check_score', 'N/A'):.2f} | "
+            f"quality={quality_str} | "
+            f"citations={citation_str} | "
+            f"facts={fact_str} | "
             f"regen_attempts={result.get('regeneration_attempts', 0)} | "
             f"word_count={result.get('essay_metadata', {}).get('word_count', 0)}"
         )
