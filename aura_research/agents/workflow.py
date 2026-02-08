@@ -98,7 +98,7 @@ class ResearchWorkflow:
         workflow.add_edge("synthesize_essay", "finalize")
         workflow.add_edge("finalize", END)
 
-        # Compile graph (no checkpoint saver - state is ephemeral)
+        # Compile graph (note: we bypass this in run() method to avoid LangGraph checkpoint issues)
         return workflow.compile()
 
     async def _initialize_node(self, state: ResearchState) -> ResearchState:
@@ -319,7 +319,7 @@ class ResearchWorkflow:
             Final state with all results
         """
         # Initialize state
-        initial_state = {
+        state = {
             "query": query,
             "papers": [],
             "total_papers": 0,
@@ -341,8 +341,21 @@ class ResearchWorkflow:
             "essay_metadata": {}
         }
 
-        # Execute workflow
-        final_state = await self.graph.ainvoke(initial_state)
+        # Execute workflow manually (bypass LangGraph checkpoint issues)
+        try:
+            state = await self._initialize_node(state)
+            state = await self._fetch_papers_node(state)
+            state = await self._distribute_work_node(state)
+            state = await self._execute_agents_node(state)
+            state = await self._collect_results_node(state)
+            state = await self._synthesize_essay_node(state)
+            state = await self._finalize_node(state)
+        except Exception as e:
+            logger.error(f"Workflow execution error: {e}", exc_info=True)
+            state["errors"].append(f"Workflow error: {str(e)}")
+            state["workflow_status"] = "failed"
+
+        final_state = state
 
         return {
             "query": final_state["query"],
