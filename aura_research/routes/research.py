@@ -621,7 +621,7 @@ async def get_session_details(
     # Extract quality metadata from active session if available
     quality_metadata = {}
     if session_id in active_sessions:
-        result = active_sessions[session_id].get("result", {})
+        result = active_sessions[session_id].get("result") or {}
         quality_metadata = {
             "quality_warnings": result.get("quality_warnings", []),
             "regeneration_exhausted": result.get("regeneration_exhausted", False),
