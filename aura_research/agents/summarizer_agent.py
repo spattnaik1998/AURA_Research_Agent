@@ -93,11 +93,47 @@ class SummarizerAgent(BaseAgent):
         subordinate_results = task.get("subordinate_results", [])
 
         if not analyses:
+            # FALLBACK: Even without analyses, generate a basic essay from the query
+            self._safe_print(f"\n[Summarizer] ⚠️  No analyses available. Generating essay from query alone...")
+            fallback_essay = f"""# Research Essay: {query}
+
+## Introduction
+
+This research explores the topic of {query}. While analysis of source materials was not available
+at the time of essay generation, this essay provides foundational context and structure for the research area.
+
+## Key Considerations
+
+The field of {query} encompasses multiple dimensions and approaches. Further research with proper
+source material would enhance the depth and specificity of this analysis.
+
+## Conclusion
+
+Research on {query} requires careful examination of available literature and empirical evidence.
+A comprehensive review of academic sources would strengthen understanding of this topic area.
+
+---
+*Note: This essay was generated without source material analyses. A complete research would incorporate
+peer-reviewed papers and empirical data.*"""
+
+            # Still process evaluation even without analyses (for feedback purposes)
+            file_path = self._save_essay(query, fallback_essay)
+            metadata = self._generate_metadata(fallback_essay, [])
+
             return {
-                "essay": "No analyses available to synthesize.",
-                "word_count": 0,
-                "citations": 0,
-                "file_path": None
+                "status": "completed",
+                "essay": fallback_essay,
+                "audio_essay": fallback_essay,
+                "file_path": file_path,
+                "rag_ready": False,
+                "quality_score": None,
+                "citation_accuracy": None,
+                "fact_check_score": None,
+                "quality_warnings": ["No source material analyses available - essay generated from query only"],
+                "regeneration_exhausted": False,
+                "regeneration_attempts": 0,
+                "reasoning_trace": {"generation_approach": "Query-based fallback"},
+                **metadata
             }
 
         self._safe_print(f"\n[Summarizer] Synthesizing {len(analyses)} analyses into essay...")
@@ -248,10 +284,13 @@ class SummarizerAgent(BaseAgent):
             quality_warnings.append(f"Fact-check score {fact_check_result['supported_percentage']*100:.1f}% below threshold ({MIN_SUPPORTED_CLAIMS_PCT*100:.0f}%)")
 
         return {
+            "status": "completed",  # CRITICAL: Always mark as completed if essay exists
             "essay": essay,
             "audio_essay": audio_essay,  # NEW: audio-optimized version
             "file_path": file_path,
             "rag_ready": rag_initialized,  # Signal that RAG is actually initialized
+            # SEPARATE EVALUATION FROM ESSAY DELIVERY
+            # These are metadata/feedback, not requirements for essay delivery
             "quality_score": quality_score,
             "citation_accuracy": citation_result.success_rate,
             "fact_check_score": fact_check_result["supported_percentage"],

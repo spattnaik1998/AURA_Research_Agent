@@ -98,6 +98,41 @@ class ResearchWorkflow:
             # Final fallback - remove any problematic characters
             print(message.encode('ascii', errors='replace').decode('ascii'))
 
+    def _generate_fallback_essay(self, query: str, analyses: List[Dict[str, Any]]) -> str:
+        """
+        Generate a basic fallback essay when summarizer fails
+        Ensures that essays are ALWAYS delivered, even if evaluation fails
+
+        Args:
+            query: Research query
+            analyses: List of paper analyses
+
+        Returns:
+            Basic essay structure with key findings from analyses
+        """
+        essay_parts = []
+        essay_parts.append(f"# Research Essay: {query}\n")
+
+        # Introduction
+        essay_parts.append("## Introduction\n")
+        essay_parts.append(f"This research explores the topic of {query}. ")
+        essay_parts.append(f"The following analysis synthesizes findings from {len(analyses)} research sources.\n\n")
+
+        # Key Findings
+        if analyses:
+            essay_parts.append("## Key Findings\n")
+            for i, analysis in enumerate(analyses[:5], 1):  # Use first 5 analyses
+                summary = analysis.get("summary", "")[:200]
+                if summary:
+                    essay_parts.append(f"{i}. {summary}\n")
+
+        # Conclusion
+        essay_parts.append("\n## Conclusion\n")
+        essay_parts.append(f"This research on {query} highlights the importance of systematic investigation. ")
+        essay_parts.append("Further analysis and synthesis of these findings would enhance understanding of this topic area.\n")
+
+        return "".join(essay_parts)
+
     def _build_graph(self) -> StateGraph:
         """
         Build the LangGraph workflow
@@ -283,20 +318,21 @@ class ResearchWorkflow:
             # Execute summarizer agent with dynamic timeout
             try:
                 logger.info(f"Executing summarizer with timeout: {synthesis_timeout}s")
-                result = await asyncio.wait_for(
+                exec_result = await asyncio.wait_for(
                     self.summarizer.execute(summarizer_task),
                     timeout=synthesis_timeout
                 )
-                logger.info(f"Summarizer returned status: {result.get('status')}")
-                if result.get('status') != 'completed':
-                    logger.error(f"Summarizer failed! Result: {result}")
-                    self._safe_print(f"[ERROR] Summarizer failed: {result.get('error', 'Unknown error')}")
+                logger.info(f"Summarizer returned status: {exec_result.get('status')}")
 
-                if result.get("status") == "completed":
-                    essay_data = result.get("result", {})
+                # Extract essay data from the execute() wrapper
+                # Note: BaseAgent.execute() returns: {status, result, ...}
+                # The actual essay data is in result["result"]
+                if exec_result.get("status") == "completed":
+                    essay_data = exec_result.get("result", {})
                     logger.info(f"Essay data keys: {list(essay_data.keys())}")
                     logger.info(f"Essay length: {len(essay_data.get('essay', ''))}")
 
+                    # Extract essay content (ALWAYS include essay even if evaluation failed)
                     state["essay"] = essay_data.get("essay", "")
                     state["audio_essay"] = essay_data.get("audio_essay", "")
                     state["essay_file_path"] = essay_data.get("file_path", "")
@@ -306,7 +342,7 @@ class ResearchWorkflow:
                         "papers_synthesized": essay_data.get("papers_synthesized", 0)
                     }
 
-                    # Extract quality metadata from summarizer result
+                    # Extract evaluation metrics (SEPARATE from essay - for frontend display only)
                     state["quality_score"] = essay_data.get("quality_score")
                     state["citation_accuracy"] = essay_data.get("citation_accuracy")
                     state["fact_check_score"] = essay_data.get("fact_check_score")
@@ -319,8 +355,13 @@ class ResearchWorkflow:
 
                     self._safe_print(f"[Workflow] Essay synthesized: {essay_data.get('word_count', 0)} words")
                 else:
-                    state["errors"].append(f"Summarizer failed: {result.get('error', 'Unknown error')}")
+                    # Summarizer execution failed - log error but don't crash
+                    error_msg = exec_result.get('error', 'Unknown error')
+                    logger.error(f"Summarizer execution failed: {error_msg}")
+                    self._safe_print(f"[ERROR] Summarizer execution failed: {error_msg}")
+                    state["errors"].append(f"Summarizer error: {error_msg}")
                     state["workflow_status"] = "synthesis_failed"
+                    # Return empty essay with error flag (don't crash workflow)
                     state["essay"] = ""
                     state["essay_file_path"] = ""
                     state["essay_metadata"] = {}
@@ -328,32 +369,59 @@ class ResearchWorkflow:
                 logger.error(f"Unicode encoding error during summarizer execution: {e}", exc_info=True)
                 state["errors"].append(f"Unicode encoding error: {str(e)}")
                 state["workflow_status"] = "synthesis_error"
-                # Return empty essay but mark as error rather than crash
-                state["essay"] = ""
+                # Generate fallback essay from analyses
+                fallback_essay = self._generate_fallback_essay(state["query"], state["all_analyses"])
+                state["essay"] = fallback_essay
                 state["essay_file_path"] = ""
-                state["essay_metadata"] = {}
+                state["essay_metadata"] = {
+                    "word_count": len(fallback_essay.split()),
+                    "citations": 0,
+                    "papers_synthesized": len(state["all_analyses"])
+                }
+                state["quality_warnings"].append("Essay generated with fallback method due to encoding error")
             except Exception as e:
                 logger.error(f"Error in summarizer execution: {e}", exc_info=True)
                 state["errors"].append(f"Summarizer error: {str(e)}")
                 state["workflow_status"] = "synthesis_error"
-                state["essay"] = ""
+                # Generate fallback essay from analyses instead of returning empty
+                fallback_essay = self._generate_fallback_essay(state["query"], state["all_analyses"])
+                state["essay"] = fallback_essay
                 state["essay_file_path"] = ""
-                state["essay_metadata"] = {}
+                state["essay_metadata"] = {
+                    "word_count": len(fallback_essay.split()),
+                    "citations": 0,
+                    "papers_synthesized": len(state["all_analyses"])
+                }
+                state["quality_warnings"].append("Essay generated with fallback method due to error")
 
         except asyncio.TimeoutError:
             error_msg = f"Essay synthesis timed out after {synthesis_timeout:.0f}s"
             logger.warning(error_msg)
             state["errors"].append(error_msg)
             state["workflow_status"] = "synthesis_timeout"
-            state["essay"] = "Essay synthesis incomplete due to timeout."
+            # Generate fallback essay instead of returning timeout message
+            fallback_essay = self._generate_fallback_essay(state["query"], state["all_analyses"])
+            state["essay"] = fallback_essay
             state["essay_file_path"] = ""
-            state["essay_metadata"] = {}
+            state["essay_metadata"] = {
+                "word_count": len(fallback_essay.split()),
+                "citations": 0,
+                "papers_synthesized": len(state["all_analyses"])
+            }
+            state["quality_warnings"] = ["Essay generation timed out, fallback essay generated"]
         except Exception as e:
             state["errors"].append(f"Synthesis error: {str(e)}")
             state["workflow_status"] = "synthesis_failed"
-            state["essay"] = ""
+            # Generate fallback essay instead of returning empty
+            fallback_essay = self._generate_fallback_essay(state["query"], state["all_analyses"])
+            state["essay"] = fallback_essay
             state["essay_file_path"] = ""
-            state["essay_metadata"] = {}
+            state["essay_metadata"] = {
+                "word_count": len(fallback_essay.split()),
+                "citations": 0,
+                "papers_synthesized": len(state["all_analyses"])
+            }
+            state["quality_warnings"] = ["Essay generated with fallback method due to error"]
 
         return state
 
