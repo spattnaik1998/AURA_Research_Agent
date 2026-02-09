@@ -18,6 +18,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Download spacy model for NLP processing
+RUN python -m spacy download en_core_web_sm
+
 # Copy application code
 COPY aura_research/ ./aura_research/
 

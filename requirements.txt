@@ -35,3 +35,6 @@ pyodbc>=4.0.35
 
 # Authentication
 PyJWT>=2.8.0
+
+# NLP and Language Processing
+spacy>=3.7.2

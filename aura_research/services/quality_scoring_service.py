@@ -46,11 +46,17 @@ class QualityScoringService:
         try:
             self.nlp = spacy.load("en_core_web_sm")
             logger.info("SpaCy model loaded successfully")
-        except OSError:
-            logger.warning("SpaCy model not found. Installing...")
-            import os
-            os.system("python -m spacy download en_core_web_sm")
-            self.nlp = spacy.load("en_core_web_sm")
+        except OSError as e:
+            logger.error(f"SpaCy model 'en_core_web_sm' not found: {e}")
+            logger.error("Please ensure spacy is installed: pip install spacy")
+            logger.error("And download the model: python -m spacy download en_core_web_sm")
+            raise RuntimeError(
+                "SpaCy model 'en_core_web_sm' not available. "
+                "Install spacy and download the model to proceed."
+            ) from e
+        except Exception as e:
+            logger.error(f"Unexpected error loading SpaCy model: {e}")
+            raise
 
     async def score_essay(
         self,
@@ -210,8 +216,7 @@ class QualityScoringService:
         # Count hedging language
         hedging_words = {
             "suggests", "may", "appears", "indicates", "implies",
-            "could", "might", "seems", "potentially", "arguably",
-            "arguably", "arguably"
+            "could", "might", "seems", "potentially", "arguably"
         }
         hedging_count = sum(
             1 for token in doc if token.text.lower() in hedging_words
@@ -377,9 +382,11 @@ class QualityScoringService:
 
         error_count = sum(len(re.findall(pattern, essay)) for pattern in error_patterns)
 
-        # Calculate score
-        score = (format_ratio * 8) + (10 - min(error_count, 10))
-        return min(max(score, 0), 10.0) / 2  # Average the two components
+        # Calculate score: average format accuracy and error penalty
+        format_score = format_ratio * 10  # 0-10 scale
+        error_score = 10 - min(error_count, 10)  # 0-10 scale (10 = no errors)
+        score = (format_score + error_score) / 2  # Average both components
+        return min(max(score, 0), 10.0)
 
     def _calculate_overall_score(self, scores: Dict[str, float]) -> float:
         """
