@@ -3,13 +3,14 @@ Chat API routes for AURA RAG chatbot
 Integrated with SQL Server database
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from ..rag.chatbot import get_chatbot, clear_chatbot
 from ..services.db_service import get_db_service
 from ..services.auth_service import get_auth_service
+from ..utils.rate_limiter import limiter
 
 security = HTTPBearer(auto_error=False)
 
@@ -72,8 +73,10 @@ class ChatHistoryResponse(BaseModel):
 
 
 @router.post("/", response_model=ChatResponse)
+@limiter.limit("50/hour")
 async def chat(
-    request: ChatRequest,
+    body: ChatRequest,
+    request: Request,
     current_user: Dict[str, Any] = Depends(require_auth)
 ):
     """
@@ -102,7 +105,7 @@ async def chat(
         user_id = current_user["user_id"]
 
         # Verify the user owns this session
-        if not verify_session_access(request.session_id, user_id, db_service):
+        if not verify_session_access(body.session_id, user_id, db_service):
             raise HTTPException(
                 status_code=403,
                 detail="You don't have permission to access this session"
@@ -110,13 +113,13 @@ async def chat(
 
         # Get or create conversation in database (non-fatal)
         db_conv = None
-        language_code = _get_language_code(request.language)
+        language_code = _get_language_code(body.language)
 
-        if request.session_id:
+        if body.session_id:
             try:
                 db_conv = db_service.get_or_create_conversation(
-                    session_code=request.session_id,
-                    conversation_code=request.conversation_id,
+                    session_code=body.session_id,
+                    conversation_code=body.conversation_id,
                     user_id=user_id,
                     language=language_code
                 )
@@ -124,13 +127,13 @@ async def chat(
                 print(f"[Chat] Warning: Failed to create conversation in DB: {e}")
 
         # Get chatbot instance
-        chatbot = get_chatbot(request.session_id)
+        chatbot = get_chatbot(body.session_id)
 
         # Process message
         result = await chatbot.chat(
-            message=request.message,
-            conversation_id=request.conversation_id,
-            language=request.language or "English"
+            message=body.message,
+            conversation_id=body.conversation_id,
+            language=body.language or "English"
         )
 
         # Save messages to database (non-fatal if it fails)
@@ -141,7 +144,7 @@ async def chat(
                 db_service.save_chat_message(
                     conversation_id=db_conv['conversation_id'],
                     role='user',
-                    content=request.message,
+                    content=body.message,
                     user_id=user_id
                 )
 

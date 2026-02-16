@@ -3,11 +3,15 @@ AURA - Autonomous Unified Research Assistant
 FastAPI Backend Server
 """
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from fastapi.responses import JSONResponse
 from .routes import chat, research, graph, ideation, auth
 from .utils.config import validate_env_vars
 from .utils.logging_config import setup_logging, get_logger
+from .utils.rate_limiter import limiter
 from .database.connection import get_db_connection
 import uvicorn
 
@@ -15,14 +19,45 @@ import uvicorn
 setup_logging()
 logger = get_logger('aura.api')
 
+# Initialize Sentry for error tracking (optional)
+sentry_dsn = os.getenv('SENTRY_DSN')
+if sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        integrations=[
+            FastApiIntegration(),
+            SqlalchemyIntegration(),
+        ],
+        environment=os.getenv('SENTRY_ENVIRONMENT', 'local'),
+        traces_sample_rate=float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.1')),
+        debug=False
+    )
+    logger.info("Sentry error tracking initialized", extra={
+        'environment': os.getenv('SENTRY_ENVIRONMENT', 'local')
+    })
+
 app = FastAPI(
     title="AURA Research Assistant",
     description="Autonomous multi-agent research system with RAG chatbot and user authentication",
     version="2.0.0"
 )
 
+# Register the shared rate limiter
+app.state.limiter = limiter
+
+# Custom exception handler for rate limit exceeded
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request, exc):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please try again later."}
+    )
+
 # CORS middleware for frontend integration
-import os
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
 app.add_middleware(
@@ -32,6 +67,15 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+# Add rate limiting middleware
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# Add Prometheus metrics instrumentation
+from prometheus_fastapi_instrumentator import Instrumentator
+
+# Configure Prometheus metrics
+Instrumentator().instrument(app).expose(app)
 
 # Include routers
 app.include_router(auth.router)  # Authentication routes
@@ -59,28 +103,25 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check"""
-    # Check database connection
-    db_status = "unknown"
-    try:
-        db = get_db_connection()
-        if db.test_connection():
-            db_status = "connected"
-        else:
-            db_status = "disconnected"
-    except Exception as e:
-        db_status = f"error: {str(e)}"
+    """Comprehensive health check with detailed diagnostics"""
+    from .services.health_service import get_health_service
+    health_service = get_health_service()
+    return health_service.get_health_status()
 
-    return {
-        "status": "healthy",
-        "services": {
-            "api": "running",
-            "agents": "ready",
-            "rag": "ready",
-            "database": db_status,
-            "auth": "ready"
-        }
-    }
+@app.get("/readiness")
+async def readiness_check():
+    """Lightweight readiness check for load balancers and orchestrators"""
+    from .services.health_service import get_health_service
+    from fastapi.responses import JSONResponse
+
+    health_service = get_health_service()
+    status = health_service.get_readiness_status()
+
+    # Return 503 Service Unavailable if not ready
+    if not status["ready"]:
+        return JSONResponse(status_code=503, content=status)
+
+    return status
 
 @app.on_event("startup")
 async def startup_event():

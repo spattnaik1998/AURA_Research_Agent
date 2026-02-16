@@ -2,6 +2,7 @@
 fastapi>=0.104.1
 uvicorn[standard]>=0.24.0
 python-multipart>=0.0.6
+slowapi>=0.1.9
 
 # Environment and Config
 python-dotenv>=1.0.0
@@ -35,6 +36,25 @@ pyodbc>=4.0.35
 
 # Authentication
 PyJWT>=2.8.0
+bcrypt>=4.1.2
 
 # NLP and Language Processing
 spacy>=3.7.2
+
+# System Monitoring
+psutil>=5.9.8
+
+# Logging
+python-json-logger>=2.0.7
+
+# Error Tracking
+sentry-sdk[fastapi]>=1.40.0
+
+# Metrics
+prometheus-fastapi-instrumentator>=6.1.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0

@@ -1,0 +1,21 @@
+# AURA Research Agent - SQL Server Container
+# Custom SQL Server image with database initialization script
+
+FROM mcr.microsoft.com/mssql/server:2022-latest
+
+# Set environment variables (will be overridden by docker-compose)
+ENV ACCEPT_EULA=Y
+
+# Copy database initialization files
+COPY database/schema.sql /docker-entrypoint-initdb.d/schema.sql
+COPY database/migrations/ /docker-entrypoint-initdb.d/migrations/
+
+# Copy and make entrypoint script executable
+COPY database/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Expose SQL Server port
+EXPOSE 1433
+
+# Use custom entrypoint for initialization
+ENTRYPOINT ["/entrypoint.sh"]

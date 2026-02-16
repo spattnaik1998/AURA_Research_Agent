@@ -1160,6 +1160,124 @@ async function playAudio() {
 }
 
 /**
+ * Export research session to PDF
+ */
+async function exportSessionToPDF() {
+    if (!currentSessionId) {
+        alert('No active session to export');
+        return;
+    }
+
+    const btn = document.getElementById('export-pdf-btn');
+    const btnText = document.getElementById('pdf-btn-text');
+    const spinner = document.getElementById('pdf-spinner');
+
+    if (btn) btn.disabled = true;
+    if (btnText) btnText.textContent = 'Exporting...';
+    if (spinner) spinner.classList.remove('hidden');
+
+    try {
+        // Default to APA style, could add dropdown to select other styles
+        const citationStyle = 'APA';
+
+        const response = await fetch(
+            `${API_BASE_URL}/research/session/${currentSessionId}/export-pdf?citation_style=${citationStyle}`,
+            {
+                method: 'POST',
+                headers: getAuthHeaders()
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to export PDF');
+        }
+
+        // Get the PDF blob and download it
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `research_${currentSessionId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+        showNotification('PDF exported successfully!', 'success');
+
+    } catch (error) {
+        showNotification('Failed to export PDF: ' + error.message, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = '📄 Export to PDF';
+        if (spinner) spinner.classList.add('hidden');
+    }
+}
+
+/**
+ * Share research session publicly
+ */
+async function shareSession() {
+    if (!currentSessionId) {
+        alert('No active session to share');
+        return;
+    }
+
+    const btn = document.getElementById('share-btn');
+    const btnText = document.getElementById('share-btn-text');
+    const spinner = document.getElementById('share-spinner');
+
+    if (btn) btn.disabled = true;
+    if (btnText) btnText.textContent = 'Sharing...';
+    if (spinner) spinner.classList.remove('hidden');
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/research/session/${currentSessionId}/share`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getAuthHeaders()
+                },
+                body: JSON.stringify({
+                    privacy_level: 'public'
+                })
+            }
+        );
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to share session');
+        }
+
+        const data = await response.json();
+
+        // Generate the full public link
+        const publicLink = `${window.location.origin}/public/${currentSessionId}`;
+
+        // Copy to clipboard
+        await navigator.clipboard.writeText(publicLink);
+
+        showNotification(`✓ Shared! Link copied to clipboard: ${publicLink}`, 'success');
+        if (btnText) btnText.textContent = '✓ Shared!';
+
+        // Revert button text after 2 seconds
+        setTimeout(() => {
+            if (btnText) btnText.textContent = '🔗 Share';
+        }, 2000);
+
+    } catch (error) {
+        showNotification('Failed to share session: ' + error.message, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+        if (btnText) btnText.textContent = '🔗 Share';
+        if (spinner) spinner.classList.add('hidden');
+    }
+}
+
+/**
  * Initialize audio UI when research completes
  */
 function initializeAudioUI() {

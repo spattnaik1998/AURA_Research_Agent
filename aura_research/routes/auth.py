@@ -8,6 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
 from ..services.auth_service import get_auth_service
+from ..utils.rate_limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer(auto_error=False)
@@ -202,27 +203,42 @@ async def login(request: LoginRequest, http_request: Request):
         }
         ```
     """
-    auth_service = get_auth_service()
-    ip_address = get_client_ip(http_request)
-    user_agent = get_user_agent(http_request)
+    try:
+        auth_service = get_auth_service()
+        ip_address = get_client_ip(http_request)
+        user_agent = get_user_agent(http_request)
 
-    result = auth_service.login(
-        username_or_email=request.username_or_email,
-        password=request.password,
-        ip_address=ip_address,
-        user_agent=user_agent
-    )
+        result = auth_service.login(
+            username_or_email=request.username_or_email,
+            password=request.password,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
 
-    if not result["success"]:
-        raise HTTPException(status_code=401, detail=result["error"])
+        if not result["success"]:
+            raise HTTPException(status_code=401, detail=result["error"])
 
-    return AuthResponse(
-        success=True,
-        user=UserResponse(**result["user"]),
-        access_token=result["access_token"],
-        refresh_token=result["refresh_token"],
-        token_type=result["token_type"]
-    )
+        return AuthResponse(
+            success=True,
+            user=UserResponse(**result["user"]),
+            access_token=result["access_token"],
+            refresh_token=result["refresh_token"],
+            token_type=result["token_type"]
+        )
+    except HTTPException:
+        # Re-raise HTTP exceptions (like auth failures)
+        raise
+    except Exception as e:
+        import logging
+        logger = logging.getLogger("aura.auth")
+        logger.error(f"Login endpoint error: {str(e)}", exc_info=True, extra={
+            'error_type': type(e).__name__,
+            'username_or_email': request.username_or_email
+        })
+        raise HTTPException(
+            status_code=500,
+            detail=f"Login failed: {str(e)}"
+        )
 
 
 @router.post("/logout", response_model=MessageResponse)

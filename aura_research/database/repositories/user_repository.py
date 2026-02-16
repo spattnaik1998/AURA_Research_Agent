@@ -39,13 +39,23 @@ class UserRepository(BaseRepository):
 
     def get_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         """Get user by username."""
-        query = "SELECT * FROM Users WHERE username = ?"
-        return self.db.fetch_one(query, (username,))
+        try:
+            query = "SELECT * FROM Users WHERE username = ?"
+            return self.db.fetch_one(query, (username,))
+        except Exception as e:
+            import logging
+            logging.getLogger('aura.database').error(f"Error getting user by username: {str(e)}", exc_info=True)
+            return None
 
     def get_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email."""
-        query = "SELECT * FROM Users WHERE email = ?"
-        return self.db.fetch_one(query, (email,))
+        try:
+            query = "SELECT * FROM Users WHERE email = ?"
+            return self.db.fetch_one(query, (email,))
+        except Exception as e:
+            import logging
+            logging.getLogger('aura.database').error(f"Error getting user by email: {str(e)}", exc_info=True)
+            return None
 
     def update_last_login(self, user_id: int) -> bool:
         """Update user's last login timestamp."""

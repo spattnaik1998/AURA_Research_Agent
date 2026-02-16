@@ -7,10 +7,14 @@ import os
 import re
 import hashlib
 import secrets
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
 import jwt
+import bcrypt
 from ..database.repositories import UserRepository, AuditLogRepository
+
+logger = logging.getLogger('aura.auth')
 
 
 # Password validation constants
@@ -58,7 +62,7 @@ class AuthService:
         self.users = UserRepository()
         self.audit = AuditLogRepository()
         self._initialized = True
-        print("[AuthService] Authentication service initialized")
+        logger.info("Authentication service initialized")
 
     # ==================== Validation Methods ====================
 
@@ -145,49 +149,69 @@ class AuthService:
 
     def hash_password(self, password: str) -> str:
         """
-        Hash a password using SHA-256 with salt.
+        Hash a password using bcrypt (12 rounds).
 
         Args:
             password: Plain text password
 
         Returns:
-            Hashed password with salt
+            Hashed password in bcrypt format ($2b$12$...)
         """
-        # Generate a random salt
-        salt = secrets.token_hex(16)
+        # Generate salt and hash using bcrypt (12 rounds for production security)
+        salt = bcrypt.gensalt(rounds=12)
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), salt)
 
-        # Hash password with salt
-        password_hash = hashlib.sha256(
-            (password + salt).encode()
-        ).hexdigest()
-
-        # Return salt:hash format
-        return f"{salt}:{password_hash}"
+        # Return bcrypt hash (already includes salt)
+        return password_hash.decode('utf-8')
 
     def verify_password(self, password: str, stored_hash: str) -> bool:
         """
         Verify a password against stored hash.
+        Supports both bcrypt (new) and SHA-256 (legacy) for backward compatibility.
 
         Args:
             password: Plain text password to verify
-            stored_hash: Stored hash in salt:hash format
+            stored_hash: Stored hash (bcrypt: $2b$12$..., legacy: salt:hash)
 
         Returns:
             True if password matches
         """
         try:
-            # Split salt and hash
-            salt, expected_hash = stored_hash.split(':')
+            # Bcrypt hash (starts with $2b$ or $2a$)
+            if stored_hash.startswith('$2b$') or stored_hash.startswith('$2a$'):
+                return bcrypt.checkpw(
+                    password.encode('utf-8'),
+                    stored_hash.encode('utf-8')
+                )
 
-            # Hash provided password with same salt
-            actual_hash = hashlib.sha256(
-                (password + salt).encode()
-            ).hexdigest()
+            # Legacy SHA-256 (format: salt:hash)
+            elif ':' in stored_hash:
+                salt, expected_hash = stored_hash.split(':')
+                actual_hash = hashlib.sha256(
+                    (password + salt).encode()
+                ).hexdigest()
+                return actual_hash == expected_hash
 
-            # Compare hashes
-            return actual_hash == expected_hash
+            return False
         except Exception:
             return False
+
+    def _upgrade_password_hash(self, user_id: int, password: str) -> None:
+        """
+        Upgrade a legacy SHA-256 password hash to bcrypt on successful login.
+        This allows seamless migration without requiring users to reset passwords.
+
+        Args:
+            user_id: User ID to upgrade
+            password: Plain text password (verified before calling)
+        """
+        try:
+            new_hash = self.hash_password(password)
+            self.users.update_password(user_id, new_hash)
+            logger.info(f"Upgraded password hash to bcrypt", extra={'user_id': user_id})
+        except Exception as e:
+            # Log warning but don't fail - user can still log in with legacy hash
+            logger.warning(f"Failed to upgrade password hash: {str(e)}", extra={'user_id': user_id, 'error': str(e)})
 
     # ==================== JWT Token Methods ====================
 
@@ -384,7 +408,7 @@ class AuthService:
                     ip_address=ip_address
                 )
             except Exception as audit_error:
-                print(f"[AuthService] Warning: Audit log failed: {audit_error}")
+                logger.warning("Audit log failed during registration", extra={'error': str(audit_error)})
                 # Continue without audit log - registration still succeeded
 
             # Create tokens
@@ -447,16 +471,30 @@ class AuthService:
         if not self.verify_password(password, user["password_hash"]):
             return {"success": False, "error": "Invalid username or password"}
 
-        try:
-            # Update last login
-            self.users.update_last_login(user["user_id"])
+        # Auto-upgrade legacy SHA-256 passwords to bcrypt
+        if not user["password_hash"].startswith('$2b$') and not user["password_hash"].startswith('$2a$'):
+            self._upgrade_password_hash(user["user_id"], password)
 
-            # Log login
-            self.audit.log_user_login(
-                user_id=user["user_id"],
-                ip_address=ip_address,
-                user_agent=user_agent
-            )
+        try:
+            # Update last login (non-fatal if it fails)
+            try:
+                self.users.update_last_login(user["user_id"])
+            except Exception as login_update_error:
+                logger.warning(f"Failed to update last login timestamp: {str(login_update_error)}",
+                             extra={'user_id': user["user_id"]})
+                # Continue with login - this is non-critical
+
+            # Log login (non-fatal if it fails)
+            try:
+                self.audit.log_user_login(
+                    user_id=user["user_id"],
+                    ip_address=ip_address,
+                    user_agent=user_agent
+                )
+            except Exception as audit_error:
+                logger.warning(f"Failed to log user login: {str(audit_error)}",
+                             extra={'user_id': user["user_id"]})
+                # Continue with login - audit is non-critical
 
             # Create tokens
             access_token = self.create_access_token(
@@ -481,6 +519,10 @@ class AuthService:
             }
 
         except Exception as e:
+            logger.error(f"Login failed: {str(e)}", exc_info=True, extra={
+                'username_or_email': username_or_email,
+                'error_type': type(e).__name__
+            })
             return {"success": False, "error": f"Login failed: {str(e)}"}
 
     def logout(

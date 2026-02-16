@@ -1,28 +1,6 @@
 version: '3.8'
 
 services:
-  # SQL Server (optional - use if you don't have existing SQL Server)
-  sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: aura-sqlserver
-    environment:
-      - ACCEPT_EULA=Y
-      - SA_PASSWORD=YourStrong!Passw0rd
-      - MSSQL_PID=Express
-    ports:
-      - "1433:1433"
-    volumes:
-      - sqlserver_data:/var/opt/mssql
-      - ./database:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P YourStrong!Passw0rd -Q "SELECT 1" -C
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - aura-network
-
   # Backend API
   backend:
     build:
@@ -32,10 +10,10 @@ services:
     environment:
       - ENVIRONMENT=production
       - DB_USE_SQL_AUTH=true
-      - DB_SERVER=sqlserver
-      - DB_DATABASE=AURA_Research
-      - DB_USERNAME=sa
-      - DB_PASSWORD=YourStrong!Passw0rd
+      - DB_SERVER=${DB_SERVER}
+      - DB_DATABASE=${DB_DATABASE}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_DRIVER={ODBC Driver 17 for SQL Server}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SERPER_API_KEY=${SERPER_API_KEY}
@@ -48,10 +26,13 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./logs:/app/logs
-    depends_on:
-      sqlserver:
-        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/readiness', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - aura-network
 
@@ -87,9 +68,6 @@ services:
     restart: unless-stopped
     networks:
       - aura-network
-
-volumes:
-  sqlserver_data:
 
 networks:
   aura-network:

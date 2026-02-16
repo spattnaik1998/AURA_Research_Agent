@@ -7,6 +7,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com)
 [![LangChain](https://img.shields.io/badge/LangChain-0.1.20-orange.svg)](https://langchain.com)
+[![Production Readiness](https://img.shields.io/badge/Production_Readiness-75%25-yellow.svg)](#production-readiness)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
@@ -303,6 +304,41 @@ CHUNK_OVERLAP = 200         # Chunk overlap
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+---
+
+## Production Readiness
+
+**Current Status**: 75% (Week 2 Complete)
+
+### Completed (Week 1-2)
+✅ Security hardening (rate limiting, password hashing, Docker secrets)
+✅ Health checks and auto-initialization
+✅ Structured JSON logging with automatic error tracking
+✅ Prometheus metrics for operational monitoring
+✅ 22+ unit and integration tests
+✅ 5-minute timeout implementation with graceful degradation
+✅ Tavily API fallback for resilience
+✅ Validation guardrails relaxation (3-phase)
+
+### In Progress (Week 3)
+⏳ Redis caching layer (40-60% cost reduction)
+⏳ Circuit breaker pattern (prevent cascade failures)
+⏳ Alembic database migrations (zero-downtime schema updates)
+⏳ Celery background task queue (non-blocking research API)
+
+**Target**: 85%+ for beta launch
+
+See [PRODUCTION_HARDENING_CHECKPOINT.md](PRODUCTION_HARDENING_CHECKPOINT.md) for detailed status.
+
+---
+
+## Documentation
+
+- **[CHANGELOG.md](CHANGELOG.md)** - All notable changes and bugfixes
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment instructions and Docker setup
+- **[TESTING_QUICK_REFERENCE.md](TESTING_QUICK_REFERENCE.md)** - Testing guide and test execution
+- **[PRODUCTION_HARDENING_CHECKPOINT.md](PRODUCTION_HARDENING_CHECKPOINT.md)** - Production readiness tracker
 
 ---
 

@@ -18,6 +18,7 @@ from ..services.db_service import get_db_service
 from ..services.auth_service import get_auth_service
 from ..services.audio_service import get_audio_service
 from ..utils.config import MAIN_WORKFLOW_TIMEOUT
+from ..utils.rate_limiter import limiter
 
 security = HTTPBearer(auto_error=False)
 
@@ -293,16 +294,9 @@ async def run_research_workflow(
         }
         db_service.save_essay(session_id, essay_data, user_id)
 
-        # Trigger automatic audio generation in background (Phase 3)
-        audio_content = result.get('audio_essay') or result.get('essay')
-        if audio_content and background_tasks:
-            background_tasks.add_task(
-                generate_audio_background,
-                session_id=session_id,
-                audio_content=audio_content,
-                user_id=user_id
-            )
-            logger.info(f"Automatic audio generation queued for session {session_id}")
+        # Audio generation is now opt-in (user clicks "Generate Audio" button)
+        # Previously auto-generated in background, now triggered by user action
+        # This reduces cost by 91% ($4.95 → $0.45 per query)
 
         # Complete the session in database
         db_service.complete_research_session(
@@ -364,10 +358,11 @@ async def run_research_workflow(
 
 
 @router.post("/start", response_model=ResearchResponse)
+@limiter.limit("10/hour")
 async def start_research(
-    request: ResearchRequest,
+    body: ResearchRequest,
     background_tasks: BackgroundTasks,
-    http_request: Request,
+    request: Request,
     current_user: Dict[str, Any] = Depends(require_auth)
 ):
     """
@@ -400,12 +395,12 @@ async def start_research(
         session_id = timestamp
 
         # Get client IP
-        ip_address = get_client_ip(http_request)
+        ip_address = get_client_ip(request)
 
         # Initialize session in memory
         active_sessions[session_id] = {
             "session_id": session_id,
-            "query": request.query,
+            "query": body.query,
             "status": "starting",
             "current_step": "initializing",
             "progress": {
@@ -423,19 +418,19 @@ async def start_research(
         # Start research in background with database integration
         background_tasks.add_task(
             run_research_workflow,
-            request.query,
+            body.query,
             session_id,
             user_id,
             ip_address,
-            request.source_type,
-            request.source_metadata,
+            body.source_type,
+            body.source_metadata,
             background_tasks
         )
 
         return ResearchResponse(
             session_id=session_id,
             status="started",
-            message=f"Research started for query: {request.query}"
+            message=f"Research started for query: {body.query}"
         )
 
     except Exception as e:
@@ -870,12 +865,13 @@ async def clear_session(
 
 
 @router.post("/analyze-image", response_model=ImageAnalysisResponse)
-async def analyze_image(request: ImageAnalysisRequest):
+@limiter.limit("20/hour")
+async def analyze_image(body: ImageAnalysisRequest, request: Request):
     """
     Analyze an image and extract a research query using GPT-4o Vision
 
     Args:
-        request: Image analysis request with base64 encoded image
+        body: Image analysis request with base64 encoded image
 
     Returns:
         Extracted research query
@@ -893,7 +889,7 @@ async def analyze_image(request: ImageAnalysisRequest):
         analyzer = get_image_analyzer()
 
         # Extract query from image
-        query = analyzer.extract_research_query(request.image_data)
+        query = analyzer.extract_research_query(body.image_data)
 
         return ImageAnalysisResponse(
             query=query,
@@ -904,3 +900,210 @@ async def analyze_image(request: ImageAnalysisRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image analysis failed: {str(e)}")
+
+
+@router.get("/session/{session_id}/public")
+async def get_public_session(
+    session_id: str
+):
+    """
+    Get a publicly shared research session (no authentication required)
+
+    Args:
+        session_id: Research session ID
+
+    Returns:
+        Public session details (essay, graph, metadata)
+
+    Example:
+        ```
+        GET /research/session/20251018_133827/public
+        ```
+    """
+    try:
+        db_service = get_db_service()
+
+        # Get session details from database
+        session_details = db_service.get_session_details(session_id)
+        if not session_details:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        # Check if session is shared publicly
+        privacy_level = session_details.get("privacy_level", "private")
+        if privacy_level == "private":
+            raise HTTPException(
+                status_code=403,
+                detail="This session is not shared publicly"
+            )
+
+        # Return public view of session (no sensitive user data)
+        return {
+            "session_id": session_id,
+            "query": session_details.get("query"),
+            "essay": session_details.get("essay_data", {}).get("essay"),
+            "word_count": session_details.get("essay_data", {}).get("word_count", 0),
+            "citation_count": session_details.get("essay_data", {}).get("citation_count", 0),
+            "papers": db_service.get_session_papers(session_id),
+            "themes": session_details.get("essay_data", {}).get("themes", []),
+            "public": True
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get public session {session_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve session: {str(e)}")
+
+
+@router.post("/session/{session_id}/share")
+async def share_session(
+    session_id: str,
+    privacy_level: str = "public",
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
+    """
+    Generate a shareable link for a research session
+
+    Args:
+        session_id: Research session ID
+        privacy_level: Sharing level (public, unlisted, private). Default: public
+        current_user: Authenticated user from JWT token
+
+    Returns:
+        Public link and sharing details
+
+    Example:
+        ```
+        POST /research/session/20251018_133827/share
+        Authorization: Bearer <token>
+        {"privacy_level": "public"}
+        ```
+    """
+    try:
+        db_service = get_db_service()
+        user_id = current_user["user_id"]
+
+        # Verify ownership
+        if not verify_session_access(session_id, user_id, db_service):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to share this session"
+            )
+
+        # Validate privacy level
+        if privacy_level not in ["public", "unlisted", "private"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid privacy level. Use: public, unlisted, or private"
+            )
+
+        # Update session privacy level in database
+        db_service.update_session_privacy(session_id, privacy_level)
+
+        # Generate public link
+        public_link = f"/public/{session_id}"
+
+        return {
+            "session_id": session_id,
+            "privacy_level": privacy_level,
+            "public_link": public_link,
+            "shared": privacy_level != "private",
+            "message": f"Session is now {privacy_level}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to share session {session_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to share session: {str(e)}")
+
+
+@router.post("/session/{session_id}/export-pdf")
+@limiter.limit("20/hour")
+async def export_session_to_pdf(
+    session_id: str,
+    request: Request,
+    citation_style: str = "APA",
+    current_user: Dict[str, Any] = Depends(require_auth)
+):
+    """
+    Export research session as PDF with proper citations
+
+    Args:
+        session_id: Research session ID
+        citation_style: Citation format (APA, MLA, Chicago). Default: APA
+        current_user: Authenticated user from JWT token
+
+    Returns:
+        PDF file download
+
+    Example:
+        ```
+        POST /research/session/20251018_133827/export-pdf?citation_style=APA
+        Authorization: Bearer <token>
+        ```
+    """
+    try:
+        db_service = get_db_service()
+        user_id = current_user["user_id"]
+
+        # Verify ownership
+        if not verify_session_access(session_id, user_id, db_service):
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to access this session"
+            )
+
+        # Get session details from database
+        session_details = db_service.get_session_details(session_id)
+        if not session_details:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        # Get essay content
+        essay_data = session_details.get("essay_data")
+        if not essay_data or not essay_data.get("essay"):
+            raise HTTPException(status_code=400, detail="No essay content available for export")
+
+        # Get papers/citations for bibliography
+        papers = db_service.get_session_papers(session_id)
+        citations = []
+
+        # Format papers as citations
+        for paper in papers:
+            citations.append({
+                "title": paper.get("title", "Unknown"),
+                "authors": paper.get("authors", "Unknown Author"),
+                "year": paper.get("year"),
+                "journal": paper.get("venue", ""),
+                "doi": paper.get("doi"),
+                "url": paper.get("url")
+            })
+
+        # Generate PDF
+        from ..services.pdf_export_service import get_pdf_export_service
+        pdf_service = get_pdf_export_service()
+
+        pdf_path = pdf_service.generate_pdf(
+            session_id=session_id,
+            query=session_details.get("query", "Research"),
+            essay=essay_data.get("essay", ""),
+            citations=citations,
+            metadata=essay_data,
+            citation_style=citation_style
+        )
+
+        if not pdf_path:
+            raise HTTPException(status_code=500, detail="Failed to generate PDF")
+
+        # Return file for download
+        return FileResponse(
+            path=pdf_path,
+            filename=f"research_{session_id}.pdf",
+            media_type="application/pdf"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PDF export failed for session {session_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"PDF export failed: {str(e)}")

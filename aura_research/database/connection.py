@@ -123,12 +123,19 @@ class DatabaseConnection:
 
     def execute(self, query: str, params: tuple = None) -> int:
         """Execute a query and return affected row count."""
-        with self.get_cursor() as cursor:
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-            return cursor.rowcount
+        try:
+            with self.get_cursor() as cursor:
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
+                return cursor.rowcount
+        except Exception as e:
+            logger.error(f"Database execute error: {str(e)}", extra={
+                'query': query[:100] if query else None,
+                'error_type': type(e).__name__
+            })
+            raise
 
     def execute_many(self, query: str, params_list: List[tuple]) -> int:
         """Execute a query for multiple parameter sets."""

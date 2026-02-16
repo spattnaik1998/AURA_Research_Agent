@@ -116,6 +116,15 @@ nul
 # Signal files
 *.signal
 
+# Process ID files & temporary outputs
+*.pid
+validation_results.json
+backend.log
+frontend.log
+
+# Malformed dependency artifacts (pip cache issues)
+=*
+
 # Claude Code settings
 .claude/
 
